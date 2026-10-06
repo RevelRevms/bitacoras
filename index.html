@@ -47,18 +47,21 @@
 <button id="b-send">FINALIZAR Y ENVIAR BITÁCORA</button></form></section>
 
 <section id="s-done" class="card hidden"><p class="ok">Bitácora registrada correctamente.</p><dl id="receipt"></dl></section>
+<section id="hist" class="hidden"><h2>Mi historial de bitácoras</h2><div id="hist-list"></div></section>
 <button id="b-out" class="sec hidden">Cerrar sesión</button>
 </main>
 <div id="rec-modal" class="modal hidden"><div class="mbox">
 <p class="notice"><b>Antes de grabar:</b> no enfoque nada sensible que la empresa no permita ni a personas que no hayan dado su consentimiento previo.</p>
 <video id="rec-live" muted playsinline autoplay></video>
 <div class="meter"><i id="rec-level"></i></div>
-<div class="info">Cámara</div><select id="rec-cam"></select>
-<div class="info">Micrófono</div><select id="rec-mic"></select>
 <div id="rec-status" class="info"></div>
+<details class="devs"><summary>Elegir cámara y micrófono</summary>
+<div class="info">Cámara</div><select id="rec-cam"></select>
+<div class="info">Micrófono</div><select id="rec-mic"></select></details>
+<div class="macts">
 <button type="button" id="rec-start" disabled>Iniciar grabación</button>
 <button type="button" id="rec-flip" class="sec">Cambiar cámara</button>
 <button type="button" id="rec-cancel" class="sec">Cancelar</button>
-</div></div>
+</div></div></div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="supabase-config.js"></script><script src="app.js"></script></body></html>

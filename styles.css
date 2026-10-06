@@ -12,3 +12,24 @@ video{width:100%;border-radius:8px;margin-top:8px;background:#000}.hidden{displa
 .meter{height:10px;background:#dde3ea;border-radius:5px;overflow:hidden;margin-top:8px}.meter i{display:block;height:100%;width:0;background:#2a8a6a}
 .mbox select{width:100%;padding:8px;margin:2px 0 6px;border:1px solid #b9c2cf;border-radius:8px;font:inherit}.mbox .info{margin-top:6px}
 .notice{background:#fff6dd;border-left:4px solid #e0a800;border-radius:6px;padding:8px 10px;font-size:.85rem;margin:6px 0}
+
+/* modal de cámara: cabe en pantallas pequeñas y los botones siempre son alcanzables */
+.modal{padding:8px}
+.mbox{max-height:calc(100vh - 16px);max-height:calc(100dvh - 16px);overflow-y:auto;display:flex;flex-direction:column;padding:10px}
+.mbox video{flex:none;max-height:34vh;max-height:34dvh;object-fit:cover}
+.mbox .notice{font-size:.76rem;padding:6px 8px;margin:0 0 8px}
+.mbox .info{font-size:.8rem}.mbox select{padding:6px 8px}
+.mbox details.devs{background:none;box-shadow:none;margin:6px 0 0;border-radius:0}
+.devs summary{cursor:pointer;color:#14507a;font-size:.85rem;padding:4px 0}
+.macts{position:sticky;bottom:-10px;background:#fff;margin-top:8px;padding:8px 0 2px;border-top:1px solid #e1e6ec;display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.macts button{margin:0;padding:12px 8px}.macts #rec-start{grid-column:1/-1}
+@media (max-height:620px){.mbox video{max-height:22vh;max-height:22dvh}}
+/* historial del estudiante (solo lectura) */
+#hist{margin-top:16px}#hist h2{font-size:1.05rem;margin:0 0 8px}
+.hl{background:#fff;border-radius:10px;margin-bottom:8px;box-shadow:0 1px 3px #0002}
+.hl summary{list-style:none;cursor:pointer;padding:12px;display:flex;gap:10px;align-items:center}.hl summary::-webkit-details-marker{display:none}
+.hl summary::after{content:"+";color:#556;font-size:1.3rem;line-height:1}.hl[open] summary::after{content:"\2212"}
+.hl .hd{flex:none;width:64px;font-weight:700;font-size:.85rem;color:#14507a;text-transform:capitalize}
+.hl .hm{flex:1;min-width:0}.hl .hm b{display:block}.hl .hm span{color:#556;font-size:.82rem;display:block}.hl .tg{color:#b00020!important;font-weight:600}
+.hl dl{margin:0;padding:0 12px 12px}.hl dt{color:#556;font-size:.78rem;margin-top:8px}.hl dd{margin:0;white-space:pre-wrap}
+.hl dt.bad,.hl dd.bad{color:#b00020}.hl video{width:100%;border-radius:8px;margin-top:8px}.hl button{margin-top:6px;width:auto;padding:8px 12px}

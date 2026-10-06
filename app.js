@@ -3,7 +3,7 @@ const sb = supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY,
 const $ = id => document.getElementById(id);
 const TZ = 'America/Guatemala', MAX = 10 * 1024 * 1024;
 const SCREENS = ['s-login','s-profile','s-home','s-form','s-done'];
-let user, student, log, video = null; // video = {blob, type, name}
+let user, student, log, myLogs = [], video = null; // video = {blob, type, name}
 
 const ERR = {
   JORNADA_YA_INICIADA: 'Ya inició una jornada hoy.',
@@ -18,7 +18,8 @@ const ERR = {
 const msg = t => { $('msg').textContent = t || ''; };
 const fail = e => { const m = e?.message || String(e);
   msg(Object.entries(ERR).find(([k]) => m.includes(k))?.[1] || 'Error: ' + m); };
-const show = id => SCREENS.forEach(s => $(s).classList.toggle('hidden', s !== id));
+const show = id => { SCREENS.forEach(s => $(s).classList.toggle('hidden', s !== id));
+  const hv = id === 's-home' || id === 's-done'; $('hist').classList.toggle('hidden', !hv); if (hv) renderHist(); };
 const fmtTime = d => new Date(d).toLocaleTimeString('es-GT', { timeZone: TZ, hour12: false });
 const fmtDate = d => new Date(d + 'T12:00:00').toLocaleDateString('es-GT',
   { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
@@ -36,9 +37,9 @@ async function route() {
   if (r1.error) return fail(r1.error);
   student = r1.data;
   if (!student) return show('s-profile');
-  const r2 = await sb.from('daily_logs').select('*').eq('student_id', user.id).order('practice_date', { ascending: false }).limit(1);
+  const r2 = await sb.from('daily_logs').select('*').eq('student_id', user.id).order('practice_date', { ascending: false }).limit(400);
   if (r2.error) return fail(r2.error);
-  log = r2.data[0];
+  myLogs = r2.data; log = myLogs[0];
   const info = `${student.full_name} · ${student.grade} ${student.section} · ${student.practice_place}` +
     (student.institution ? ` · ${student.institution}` : '') + (student.supervisor_name ? ` · Supervisor: ${student.supervisor_name}` : '');
   $('who').textContent = $('who2').textContent = info;
@@ -59,6 +60,32 @@ function showReceipt() {
   rows.forEach(([k, v]) => { const dt = document.createElement('dt'), dd = document.createElement('dd');
     dt.textContent = k; dd.textContent = v; dl.append(dt, dd); });
   show('s-done');
+}
+
+// ---- Historial (solo lectura) ----
+const el = (t, p = {}, ...k) => { const e = document.createElement(t);
+  Object.entries(p).forEach(([a, v]) => a === 'onclick' ? e.onclick = v : e[a] = v); k.flat().forEach(x => e.append(x)); return e; };
+function renderHist() {
+  const box = $('hist-list'); box.replaceChildren();
+  if (!myLogs.length) return box.append(el('p', { className: 'info', textContent: 'Aún no tiene bitácoras registradas.' }));
+  myLogs.forEach(x => {
+    const body = el('dl'), row = (k, v, c = '') => { if (v) body.append(el('dt', { className: c, textContent: k }), el('dd', { className: c, textContent: v })); };
+    row('Actividades', x.activities); row('Actividad principal', x.main_activity); row('Aprendizaje', x.learning);
+    row('Herramientas', x.tools_used);
+    row('Supervisión', x.supervised == null ? '' : x.supervised ? 'Trabajó bajo supervisión del encargado' : 'Sin supervisión del encargado');
+    if (x.has_incident) row('Incidente', `${x.incident_description} (${x.incident_reported ? 'Se informó' : 'No se informó'} al supervisor)`, 'bad');
+    if (x.video_path) { const vb = el('div');
+      body.append(el('dt', { textContent: 'Video de evidencia' }), el('dd', {}, el('button', { type: 'button', className: 'sec', textContent: 'Ver mi video',
+        onclick: async () => { const r = await sb.storage.from('practice-videos').createSignedUrl(x.video_path, 300);
+          if (r.error) return vb.textContent = 'No se pudo cargar el video.';
+          vb.replaceChildren(el('video', { src: r.data.signedUrl, controls: true, playsInline: true })); } }), vb)); }
+    const d = new Date(x.practice_date + 'T12:00:00');
+    box.append(el('details', { className: 'hl' }, el('summary', {},
+      el('div', { className: 'hd', textContent: d.toLocaleDateString('es-GT', { weekday: 'short', day: 'numeric', month: 'short' }) }),
+      el('div', { className: 'hm' }, el('b', { textContent: x.main_activity || 'Jornada en curso' }),
+        el('span', { textContent: `Entrada ${fmtTime(x.entry_at)}, salida ${x.exit_at ? fmtTime(x.exit_at) : '—'}` }),
+        x.has_incident ? el('span', { className: 'tg', textContent: 'Con incidente' }) : '')), body));
+  });
 }
 
 $('f-login').onsubmit = async e => { e.preventDefault();
@@ -183,7 +210,7 @@ $('f-log').onsubmit = async e => { e.preventDefault(); msg('');
       p_incident_reported: inc ? radio('rep') === '1' : null,
       p_video_path: path, p_video_original_name: video.name });
     if (error) { await sb.storage.from('practice-videos').remove([path]); throw error; } // limpia huérfano
-    log = data; showReceipt();
+    log = data; myLogs = [data, ...myLogs.filter(x => x.id !== data.id)]; showReceipt();
   } catch (err) { fail(err); }
   finally { btn.disabled = false; btn.textContent = 'FINALIZAR Y ENVIAR BITÁCORA'; }
 };
