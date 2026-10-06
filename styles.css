@@ -33,3 +33,6 @@ video{width:100%;border-radius:8px;margin-top:8px;background:#000}.hidden{displa
 .hl .hm{flex:1;min-width:0}.hl .hm b{display:block}.hl .hm span{color:#556;font-size:.82rem;display:block}.hl .tg{color:#b00020!important;font-weight:600}
 .hl dl{margin:0;padding:0 12px 12px}.hl dt{color:#556;font-size:.78rem;margin-top:8px}.hl dd{margin:0;white-space:pre-wrap}
 .hl dt.bad,.hl dd.bad{color:#b00020}.hl video{width:100%;border-radius:8px;margin-top:8px}.hl button{margin-top:6px;width:auto;padding:8px 12px}
+/* vista previa de cámara más compacta (la grabación no cambia) */
+.mbox video{width:100%;height:auto;max-height:24vh;max-height:24dvh;object-fit:contain;background:#000;border-radius:8px}
+@media (max-height:620px){.mbox video{max-height:18vh;max-height:18dvh}}
