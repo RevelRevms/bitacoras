@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="es"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Bitácora de práctica supervisada</title>
+<link rel="stylesheet" href="styles.css"></head><body><main>
+<h1>Bitácora de práctica supervisada</h1>
+<div id="msg" class="err"></div>
+
+<section id="s-login" class="card hidden"><form id="f-login">
+<label>Correo</label><input id="l-email" type="email" required autocomplete="username">
+<label>Contraseña</label><input id="l-pass" type="password" required autocomplete="current-password">
+<button>Entrar</button></form></section>
+
+<section id="s-profile" class="card hidden"><p class="info">Primera vez: complete estos datos. Solo se piden una vez.</p>
+<form id="f-profile">
+<label>Nombre completo</label><input id="p-name" required minlength="3">
+<label>Grado</label><input id="p-grade" required maxlength="100" placeholder="Ej.: Sexto perito en electrónica y dispositivos digitales">
+<label>Sección</label><input id="p-section" required>
+<label>Lugar de práctica</label><input id="p-place" required>
+<label>Empresa/institución</label><input id="p-inst">
+<label>Nombre del supervisor</label><input id="p-sup">
+<label>Contacto del supervisor (opcional)</label><input id="p-supc">
+<button>Guardar perfil</button></form></section>
+
+<section id="s-home" class="card hidden"><div id="who" class="info"></div>
+<p id="today"></p><button id="b-start">INICIAR JORNADA</button></section>
+
+<section id="s-form" class="hidden">
+<div class="card"><div id="who2" class="info"></div><p class="ok" id="started"></p></div>
+<form id="f-log" class="card">
+<label>¿Qué actividades realizó durante esta jornada?</label><textarea id="a-act" required maxlength="4000"></textarea>
+<label>¿Cuál fue la actividad principal?</label><textarea id="a-main" required maxlength="2000"></textarea>
+<label>¿Qué aprendió o qué habilidad desarrolló?</label><textarea id="a-learn" required maxlength="4000"></textarea>
+<label>¿Utilizó herramientas, equipos o materiales? ¿Cuáles? (opcional)</label><textarea id="a-tools" maxlength="2000"></textarea>
+<label>¿Trabajó bajo supervisión del encargado?</label>
+<div class="opts"><label><input type="radio" name="sup" value="1" required> Sí</label><label><input type="radio" name="sup" value="0"> No</label></div>
+<label>¿Ocurrió algún incidente, accidente, inconveniente o situación especial?</label>
+<div class="opts"><label><input type="radio" name="inc" value="0" checked> No</label><label><input type="radio" name="inc" value="1"> Sí</label></div>
+<div id="inc-box" class="hidden"><label>Describa detalladamente lo ocurrido</label><textarea id="i-desc" maxlength="4000"></textarea>
+<label>¿Se informó al supervisor?</label><div class="opts"><label><input type="radio" name="rep" value="1"> Sí</label><label><input type="radio" name="rep" value="0"> No</label></div></div>
+<label>Video de evidencia de aproximadamente 10 segundos</label>
+<p class="notice"><b>Importante:</b> no grabe información, documentos, pantallas o áreas que la empresa o institución no permita mostrar, ni a ninguna persona sin su consentimiento previo. Esto protege a todos, incluido usted.</p>
+<button type="button" id="b-rec" class="sec">Grabar video (10 s)</button>
+<label class="info" style="font-weight:400">o elegir un archivo (máx. 10 MB):</label>
+<input id="v-file" type="file" accept="video/mp4,video/webm,video/quicktime">
+<video id="v-prev" class="hidden" controls playsinline></video><div id="v-info" class="info"></div>
+<button id="b-send">FINALIZAR Y ENVIAR BITÁCORA</button></form></section>
+
+<section id="s-done" class="card hidden"><p class="ok">Bitácora registrada correctamente.</p><dl id="receipt"></dl></section>
+<button id="b-out" class="sec hidden">Cerrar sesión</button>
+</main>
+<div id="rec-modal" class="modal hidden"><div class="mbox">
+<p class="notice"><b>Antes de grabar:</b> no enfoque nada sensible que la empresa no permita ni a personas que no hayan dado su consentimiento previo.</p>
+<video id="rec-live" muted playsinline autoplay></video>
+<div class="meter"><i id="rec-level"></i></div>
+<div class="info">Cámara</div><select id="rec-cam"></select>
+<div class="info">Micrófono</div><select id="rec-mic"></select>
+<div id="rec-status" class="info"></div>
+<button type="button" id="rec-start" disabled>Iniciar grabación</button>
+<button type="button" id="rec-flip" class="sec">Cambiar cámara</button>
+<button type="button" id="rec-cancel" class="sec">Cancelar</button>
+</div></div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="supabase-config.js"></script><script src="app.js"></script></body></html>
