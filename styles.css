@@ -36,7 +36,7 @@ video{width:100%;border-radius:8px;margin-top:8px;background:#000}.hidden{displa
 /* vista previa de cámara más compacta (la grabación no cambia) */
 .mbox video{width:100%;height:auto;max-height:24vh;max-height:24dvh;object-fit:contain;background:#000;border-radius:8px}
 @media (max-height:620px){.mbox video{max-height:18vh;max-height:18dvh}}
-.mbox video{max-height:26vh;max-height:26dvh}.mirror{transform:scaleX(-1)}
+.mbox video{max-height:36vh;max-height:36dvh}.mirror{transform:scaleX(-1)}
 @media (max-height:620px){.mbox video{max-height:18vh;max-height:18dvh}}
 /* vista previa de cámara: altura fija y pequeña; el ancho se ajusta a la proporción real del video (vertical u horizontal) */
 .mbox video{width:auto;max-width:100%;height:28vh;height:28dvh;max-height:none;align-self:center;object-fit:contain;background:#000}
