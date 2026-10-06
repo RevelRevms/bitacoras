@@ -1,6 +1,6 @@
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
 const $ = id => document.getElementById(id), TZ = 'America/Guatemala';
-let students = [], logs = [];
+let students = [], logs = [], kf = '';   // kf = filtro activo de los indicadores superiores
 const h = (t, p = {}, ...k) => { const e = document.createElement(t);
   for (const [a, v] of Object.entries(p)) a === 'onclick' ? e.onclick = v : e[a] = v;
   k.flat().forEach(x => e.append(x)); return e; };
@@ -25,12 +25,21 @@ async function load() {
 }
 function render() {
   const today = todayGT(), byId = Object.fromEntries(students.map(s => [s.id, s]));
-  const k = [['Estudiantes activos', students.filter(s => s.active).length],
-    ['Bitácoras de hoy', logs.filter(x => x.practice_date === today).length],
-    ['Jornadas en curso', logs.filter(x => x.status === 'in_progress').length],
-    ['Finalizadas hoy', logs.filter(x => x.practice_date === today && x.status === 'submitted').length],
-    ['Incidentes (total)', logs.filter(x => x.has_incident).length]];
-  $('kpis').replaceChildren(...k.map(([t, v]) => h('div', { className: 'fig' + (t.startsWith('Incid') && v ? ' alert' : '') }, h('b', { textContent: v }), h('span', { textContent: t }))));
+  const mineOf = s => logs.filter(x => x.student_id === s.id);
+  const FILT = { active: s => s.active, today: s => mineOf(s).some(x => x.practice_date === today),
+    open: s => mineOf(s).some(x => x.status === 'in_progress'),
+    done: s => mineOf(s).some(x => x.practice_date === today && x.status === 'submitted'),
+    inc: s => mineOf(s).some(x => x.has_incident) };
+  const NAMES = { active: 'Estudiantes activos', today: 'Con bitácora hoy', open: 'Con jornada en curso',
+    done: 'Con jornada finalizada hoy', inc: 'Con incidentes' };
+  const k = [['active', 'Estudiantes activos', students.filter(s => s.active).length],
+    ['today', 'Bitácoras de hoy', logs.filter(x => x.practice_date === today).length],
+    ['open', 'Jornadas en curso', logs.filter(x => x.status === 'in_progress').length],
+    ['done', 'Finalizadas hoy', logs.filter(x => x.practice_date === today && x.status === 'submitted').length],
+    ['inc', 'Incidentes (total)', logs.filter(x => x.has_incident).length]];
+  $('kpis').replaceChildren(...k.map(([key, t, v]) => h('button', { type: 'button', title: 'Filtrar la lista de estudiantes',
+    ariaPressed: String(kf === key), className: 'fig' + (kf === key ? ' sel' : '') + (key === 'inc' && v ? ' alert' : ''),
+    onclick: () => { kf = kf === key ? '' : key; render(); } }, h('b', { textContent: v }), h('span', { textContent: t }))));
 
   const days = [...Array(14)].map((_, i) => { const d = new Date(today + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() - 13 + i); return d.toISOString().slice(0, 10); });
   const cnt = days.map(d => logs.filter(x => x.practice_date === d).length), mx = Math.max(1, ...cnt);
@@ -45,9 +54,13 @@ function render() {
   sel.replaceChildren(h('option', { value: '', textContent: 'Todos los grados' }), ...grades.map(g => h('option', { value: g, textContent: g })));
   sel.value = cur;
   const q = $('q').value.toLowerCase();
-  const list = students.filter(s => (!sel.value || s.grade === sel.value) &&
+  const list = students.filter(s => (!sel.value || s.grade === sel.value) && (!kf || FILT[kf](s)) &&
     (`${s.full_name} ${s.practice_place} ${s.institution || ''} ${s.supervisor_name || ''}`).toLowerCase().includes(q));
-  $('list').replaceChildren(...list.map(studentRow));
+  const openIds = new Set([...document.querySelectorAll('#list details[open]')].map(d => d.id));   // conserva lo expandido
+  const note = kf ? h('div', { className: 'fnote' }, `Filtro: ${NAMES[kf]}. ${list.length} ${list.length === 1 ? 'estudiante' : 'estudiantes'}.`,
+    h('button', { type: 'button', className: 'sec', textContent: 'Quitar filtro', onclick: () => { kf = ''; render(); } })) : '';
+  $('list').replaceChildren(note, ...(list.length ? list.map(studentRow) : [h('p', { className: 'empty', textContent: 'Ningún estudiante coincide con los filtros.' })]));
+  $('list').querySelectorAll('details').forEach(d => { if (openIds.has(d.id)) d.open = true; });
 }
 const dt = (k, v) => [h('dt', { textContent: k }), h('dd', { textContent: v || '—' })];
 const mins = x => x.exit_at ? Math.max(0, Math.round((new Date(x.exit_at) - new Date(x.entry_at)) / 60000)) : 0;
@@ -59,7 +72,7 @@ function studentRow(s) {
   const led = tl?.status === 'submitted' ? h('div', { className: 'led done', textContent: `Jornada completada, salida ${fT(tl.exit_at)}` })
     : op ? h('div', { className: 'led on', textContent: op.practice_date === today ? `En jornada, entrada ${fT(op.entry_at)}` : `Jornada sin cerrar del ${fD(op.practice_date)}` }) : '';
   const fact = (k, v) => h('div', {}, h('small', { textContent: k }), h('span', { textContent: v || '—' }));
-  return h('details', { className: 'stu' }, h('summary', {}, h('div', { className: 'mk', textContent: ini }),
+  return h('details', { className: 'stu', id: 'stu-' + s.id }, h('summary', {}, h('div', { className: 'mk', textContent: ini }),
     h('div', { className: 'who' }, h('b', { textContent: s.full_name + (s.active ? '' : ' (inactivo)') }), led,
       h('div', { className: 'facts' }, fact('Lugar de práctica', s.practice_place), fact('Empresa o institución', s.institution),
         fact('Supervisor', s.supervisor_name), fact('Contacto del supervisor', s.supervisor_contact),
@@ -84,7 +97,7 @@ function logRow(x) {
       box.replaceChildren(h('video', { src: r.data.signedUrl, controls: true, playsInline: true }),
         h('a', { href: r.data.signedUrl, target: '_blank', textContent: 'Abrir o descargar (el enlace vence en 5 minutos)' })); } }), box)); }
   const d = new Date(x.practice_date + 'T12:00:00');
-  return h('details', { className: 'log' + (x.has_incident ? ' inc' : '') }, h('summary', {},
+  return h('details', { className: 'log' + (x.has_incident ? ' inc' : ''), id: 'log-' + x.id }, h('summary', {},
     h('time', { textContent: d.toLocaleDateString('es-GT', { weekday: 'short', day: 'numeric', month: 'short' }) }),
     h('div', { className: 'who' }, h('b', { textContent: x.main_activity || 'Jornada en curso' }),
       h('span', { textContent: `Entrada ${fT(x.entry_at)}, salida ${fT(x.exit_at)} (${dur(mins(x))})` })),
@@ -95,5 +108,8 @@ $('login').onsubmit = async e => { e.preventDefault();
   const { error } = await sb.auth.signInWithPassword({ email: $('em').value, password: $('pw').value });
   if (error) return $('msg').textContent = 'Credenciales incorrectas.'; start(); };
 $('out').onclick = async () => { await sb.auth.signOut(); $('msg').textContent = ''; show(true, false); };
-$('re').onclick = load; $('q').oninput = $('g').onchange = render;
+$('re').onclick = load;
+setInterval(() => { if (!document.hidden && !$('app').classList.contains('hidden')) load(); }, 60000);   // actualización automática
+document.addEventListener('visibilitychange', () => { if (!document.hidden && !$('app').classList.contains('hidden')) load(); });
+ $('q').oninput = $('g').onchange = render;
 start();

@@ -47,3 +47,8 @@ summary{list-style:none;cursor:pointer;display:flex;gap:14px;align-items:center;
 .led{display:flex;align-items:center;gap:8px;margin-top:3px;font-size:.82rem;font-weight:600}
 .led::before{content:"";flex:none;width:9px;height:9px;border-radius:50%;background:var(--c);box-shadow:0 0 0 3px var(--g)}
 .led.on{--c:#d9a441;--g:#d9a44136;color:#8a6213}.led.done{--c:#1f9d6b;--g:#1f9d6b30;color:#0f6b46}
+.kpis{overflow:hidden}
+.fig{background:none;border:0;border-left:1px solid var(--rule);border-radius:0;font:inherit;color:inherit;text-align:left;cursor:pointer}
+.fig:first-child{border-left:0}.fig:hover{background:#f1f5f2;color:inherit}.fig.sel,.fig.sel:hover{background:#e3eee8;box-shadow:inset 0 -3px var(--gold)}
+.fnote{padding:10px 14px;background:#f1f5f2;border-bottom:1px solid var(--rule);display:flex;gap:12px;align-items:center;flex-wrap:wrap;font-size:.88rem}.fnote button{padding:6px 10px}
+#list .empty{padding:14px}
