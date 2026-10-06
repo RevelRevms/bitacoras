@@ -147,6 +147,8 @@ async function openCam() {
     `Cámara: ${vt.label || 'sin nombre'}${vt.muted ? ' (SIN SEÑAL)' : ''} · Micrófono: ${at.label || 'sin nombre'}${at.muted ? ' (SIN SEÑAL)' : ''}. Diga algo: la barra verde debe moverse.`;
   [vt, at].forEach(t => { t.onmute = t.onunmute = st; }); st();
   $('rec-live').play().catch(() => {});
+  const fm = vt.getSettings().facingMode;   // espejo solo para la cámara frontal
+  $('rec-live').classList.toggle('mirror', fm ? fm === 'user' : !/back|rear|trasera|environment/i.test(vt.label));
   const devs = await navigator.mediaDevices.enumerateDevices();
   const fill = (sel, kind, cur) => { sel.replaceChildren(...devs.filter(d => d.kind === kind).map((d, i) => {
     const o = document.createElement('option'); o.value = d.deviceId; o.textContent = d.label || `${kind} ${i + 1}`; return o; })); sel.value = cur; };
