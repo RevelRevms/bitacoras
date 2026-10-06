@@ -55,9 +55,12 @@ const dur = m => m ? `${Math.floor(m / 60)} h ${m % 60} min` : 'en curso';
 function studentRow(s) {
   const mine = logs.filter(x => x.student_id === s.id), inc = mine.filter(x => x.has_incident).length, n = mine.length;
   const ini = s.full_name.split(/\s+/).slice(0, 2).map(w => w[0]).join('').toUpperCase();
+  const today = todayGT(), tl = mine.find(x => x.practice_date === today), op = mine.find(x => x.status === 'in_progress');
+  const led = tl?.status === 'submitted' ? h('div', { className: 'led done', textContent: `Jornada completada, salida ${fT(tl.exit_at)}` })
+    : op ? h('div', { className: 'led on', textContent: op.practice_date === today ? `En jornada, entrada ${fT(op.entry_at)}` : `Jornada sin cerrar del ${fD(op.practice_date)}` }) : '';
   const fact = (k, v) => h('div', {}, h('small', { textContent: k }), h('span', { textContent: v || '—' }));
   return h('details', { className: 'stu' }, h('summary', {}, h('div', { className: 'mk', textContent: ini }),
-    h('div', { className: 'who' }, h('b', { textContent: s.full_name + (s.active ? '' : ' (inactivo)') }),
+    h('div', { className: 'who' }, h('b', { textContent: s.full_name + (s.active ? '' : ' (inactivo)') }), led,
       h('div', { className: 'facts' }, fact('Lugar de práctica', s.practice_place), fact('Empresa o institución', s.institution),
         fact('Supervisor', s.supervisor_name), fact('Contacto del supervisor', s.supervisor_contact),
         fact('Grado y sección', `${s.grade}, sección ${s.section}`))),
