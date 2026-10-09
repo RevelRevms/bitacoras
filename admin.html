@@ -1,0 +1,15 @@
+<!DOCTYPE html>
+<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Panel administrativo - Bitácora</title><link rel="stylesheet" href="admin.css?v=4"></head><body><main>
+<h1>Bitácora de práctica supervisada<small>Panel de supervisión</small></h1><div id="msg" class="err"></div>
+<form id="login" class="card hidden"><input id="em" type="email" placeholder="Correo" required>
+<input id="pw" type="password" placeholder="Contraseña" required><button>Entrar</button></form>
+<div id="app" class="hidden">
+<div class="kpis" id="kpis"></div>
+<div class="charts"><div class="card"><h2>Bitácoras por día (últimos 14 días)</h2><div id="c-days"></div></div>
+<div class="card"><h2>Bitácoras por grado</h2><div id="c-grade"></div></div></div>
+<div class="bar"><input id="q" placeholder="Buscar estudiante o lugar…"><select id="g"><option value="">Todos los grados</option></select>
+<button id="re" class="sec">Actualizar</button><button id="out" class="sec">Salir</button></div>
+<div id="list"></div></div></main>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="supabase-config.js?v=4"></script><script src="admin.js?v=4"></script></body></html>
