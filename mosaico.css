@@ -1,18 +1,26 @@
 :root{--bg:#0b1411;--surf:#12201a;--ink:#e9f1ed;--mut:#93a89d;--gold:#d9a441;--red:#ff7a8a}
 *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.4 "Segoe UI",system-ui,sans-serif}
 .hidden{display:none!important}.err{color:var(--red);min-height:1.2em}
-.lg{max-width:340px;margin:12vh auto;padding:20px;display:grid;gap:10px;background:var(--surf);border-radius:10px}.lg h1{margin:0;font-size:1.2rem}
+.boot{text-align:center;color:var(--mut);margin-top:20vh}
+.lg{max-width:340px;margin:12vh auto;position:relative;z-index:30;padding:20px;display:grid;gap:10px;background:var(--surf);border-radius:10px}.lg h1{margin:0;font-size:1.2rem}
 input,select,button,.sec{font:inherit;padding:7px 10px;border-radius:6px;border:1px solid #2c4339;background:#0f1b16;color:var(--ink)}
 button{background:var(--gold);color:#201600;border-color:var(--gold);font-weight:600;cursor:pointer}
 button.sec,a.sec{background:#0f1b16;color:var(--ink);border-color:#2c4339;text-decoration:none;cursor:pointer}
 .bar{position:sticky;top:0;z-index:5;display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:8px 12px;background:#0b1411ee;border-bottom:1px solid #1e3329;backdrop-filter:blur(6px)}
 .bar label{display:flex;gap:6px;align-items:center;color:var(--mut)}#info{margin-left:auto;color:var(--mut)}
+.bar input[type=range]{padding:0;width:120px;accent-color:var(--gold)}
 #msg2{padding:0 12px}
-#grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(var(--sz,230px),1fr));gap:6px;padding:8px 12px 40px}
-.tile{position:relative;aspect-ratio:16/9;background:#000;border-radius:6px;overflow:hidden;cursor:pointer;border:1px solid #1e3329}
+/* cuadrícula uniforme (16:9) */
+#grid{display:grid;gap:4px;padding:6px 8px 40px;grid-template-columns:repeat(auto-fill,minmax(var(--sz,150px),1fr))}
+.tile{position:relative;aspect-ratio:16/9;min-height:0;background:#000;border-radius:6px;overflow:hidden;cursor:pointer;border:1px solid #1e3329}
 .tile video{width:100%;height:100%;object-fit:contain;display:block}
-.tile .cap{position:absolute;left:0;right:0;bottom:0;padding:14px 8px 5px;background:linear-gradient(transparent,#000c);font-size:.78rem;display:flex;flex-direction:column;pointer-events:none}
+/* collage: cuadros y rectángulos de distinto tamaño; 'dense' rellena huecos */
+#grid.collage{grid-template-columns:repeat(var(--cols,4),1fr);grid-auto-rows:calc(var(--sz,150px)*.5);grid-auto-flow:dense}
+#grid.collage .tile{aspect-ratio:auto;grid-column:span var(--w,1);grid-row:span var(--h,2)}
+#grid.collage .tile video{object-fit:cover}
+.tile .cap{opacity:.95;position:absolute;left:0;right:0;bottom:0;padding:14px 8px 5px;background:linear-gradient(transparent,#000c);font-size:.78rem;display:flex;flex-direction:column;pointer-events:none}
 .tile .cap b{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.tile .cap span{color:var(--mut);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#grid.sm .cap span,#grid.collage .tile.k11 .cap span{display:none}#grid.sm .cap{font-size:.68rem;padding:10px 5px 3px}
 .tile .tag{position:absolute;top:5px;right:5px;background:#b3263e;color:#fff;border-radius:4px;padding:1px 6px;font-size:.7rem;pointer-events:none}
 .tile.bad{display:grid;place-items:center;color:var(--mut);font-size:.8rem;padding:8px;text-align:center}
 .empty{grid-column:1/-1;color:var(--mut);padding:30px 0;text-align:center}
