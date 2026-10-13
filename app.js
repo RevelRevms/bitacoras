@@ -3,7 +3,7 @@ const sb = supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY,
 const $ = id => document.getElementById(id);
 const TZ = 'America/Guatemala', MAX = 10 * 1024 * 1024;
 const SCREENS = ['s-login','s-profile','s-home','s-form','s-done'];
-let user, student, log, myLogs = [], video = null; // video = {blob, type, name}
+let user, student, log, myLogs = [], myNotes = [], myRests = [], video = null; // video = {blob, type, name}
 
 const ERR = {
   JORNADA_YA_INICIADA: 'Ya inició una jornada hoy.',
@@ -13,13 +13,18 @@ const ERR = {
   CAMPOS_OBLIGATORIOS_VACIOS: 'Complete los campos obligatorios.',
   INCIDENTE_INCOMPLETO: 'Describa el incidente e indique si se informó al supervisor.',
   VIDEO_NO_ENCONTRADO_EN_STORAGE: 'El video no se subió correctamente.',
-  VIDEO_FUERA_DE_LIMITE: 'El video excede el tamaño permitido.'
+  VIDEO_FUERA_DE_LIMITE: 'El video excede el tamaño permitido.',
+  DIA_DE_DESCANSO: 'Hoy es día de descanso: no se inicia jornada.',
+  MOTIVO_TARDIO_REQUERIDO: 'Explique por qué no cerró la jornada ese día (mínimo 10 caracteres).',
+  TEXTO_DEMASIADO_LARGO: 'Uno de los textos es demasiado largo.'
 };
 const msg = t => { $('msg').textContent = t || ''; };
 const fail = e => { const m = e?.message || String(e);
   msg(Object.entries(ERR).find(([k]) => m.includes(k))?.[1] || 'Error: ' + m); };
 const show = id => { SCREENS.forEach(s => $(s).classList.toggle('hidden', s !== id));
-  const hv = id === 's-home' || id === 's-done'; $('hist').classList.toggle('hidden', !hv); if (hv) renderHist(); };
+  const hv = id === 's-home' || id === 's-done'; $('hist').classList.toggle('hidden', !hv);
+  $('warns').classList.toggle('hidden', !hv || !myNotes.length);
+  $('rests').classList.toggle('hidden', !hv || !futureRests().length); if (hv) { renderWarns(); renderRests(); renderHist(); } };
 const fmtTime = d => new Date(d).toLocaleTimeString('es-GT', { timeZone: TZ, hour12: false });
 const fmtDate = d => new Date(d + 'T12:00:00').toLocaleDateString('es-GT',
   { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
@@ -37,18 +42,27 @@ async function route() {
   if (r1.error) return fail(r1.error);
   student = r1.data;
   if (!student) return show('s-profile');
-  const r2 = await sb.from('daily_logs').select('*').eq('student_id', user.id).order('practice_date', { ascending: false }).limit(400);
+  const [r2, r3, r4] = await Promise.all([
+    sb.from('daily_logs').select('*').eq('student_id', user.id).order('practice_date', { ascending: false }).limit(400),
+    sb.from('admin_notes').select('*').eq('student_id', user.id).order('created_at', { ascending: false }),
+    sb.from('rest_days').select('*').gte('rest_date', todayGT()).order('rest_date').limit(60)]);   // propios y generales (RLS)
   if (r2.error) return fail(r2.error);
-  myLogs = r2.data; log = myLogs[0];
+  myLogs = r2.data; log = myLogs[0]; myNotes = r3.error ? [] : (r3.data || []);
+  myRests = r4.error ? [] : dedupRests(r4.data || []);
   const info = `${student.full_name} · ${student.grade} ${student.section} · ${student.practice_place}` +
     (student.institution ? ` · ${student.institution}` : '') + (student.supervisor_name ? ` · Supervisor: ${student.supervisor_name}` : '');
   $('who').textContent = $('who2').textContent = info;
   if (log?.status === 'in_progress') {
+    const late = log.practice_date < todayGT();
+    $('late-box').classList.toggle('hidden', !late); $('late-date').textContent = fmtDate(log.practice_date);
     $('started').textContent = `Jornada iniciada a las ${fmtTime(log.entry_at)} (${fmtDate(log.practice_date)})`;
     return show('s-form');
   }
   if (log?.practice_date === todayGT()) return showReceipt();
   $('today').textContent = fmtDate(todayGT());
+  const rt = myRests.find(r => r.rest_date === todayGT());   // el servidor también lo impide (DIA_DE_DESCANSO)
+  $('b-start').classList.toggle('hidden', !!rt); $('rest-today').classList.toggle('hidden', !rt);
+  $('rest-today').textContent = rt ? 'Hoy es día de descanso' + (rt.reason ? ': ' + rt.reason : '') + '. No necesita iniciar jornada.' : '';
   show('s-home');
 }
 
@@ -56,6 +70,7 @@ function showReceipt() {
   const rows = [['Estudiante', student.full_name], ['Fecha', fmtDate(log.practice_date)],
     ['Entrada', fmtTime(log.entry_at)], ['Salida', fmtTime(log.exit_at)], ['Lugar', log.practice_place],
     ['Actividad principal', log.main_activity], ['Evidencia', 'Video cargado correctamente']];
+  if (log.closed_late) rows.splice(4, 0, ['Cierre', 'Tardío (jornada de un día anterior)']);
   const dl = $('receipt'); dl.replaceChildren();
   rows.forEach(([k, v]) => { const dt = document.createElement('dt'), dd = document.createElement('dd');
     dt.textContent = k; dd.textContent = v; dl.append(dt, dd); });
@@ -65,6 +80,29 @@ function showReceipt() {
 // ---- Historial (solo lectura) ----
 const el = (t, p = {}, ...k) => { const e = document.createElement(t);
   Object.entries(p).forEach(([a, v]) => a === 'onclick' ? e.onclick = v : e[a] = v); k.flat().forEach(x => e.append(x)); return e; };
+// ---- Días de descanso (solo lectura) ----
+const dedupRests = rows => { const m = new Map();   // un descanso por fecha; el individual manda sobre el general
+  rows.forEach(r => { const p = m.get(r.rest_date); if (!p || (!p.student_id && r.student_id)) m.set(r.rest_date, r); });
+  return [...m.values()].sort((a, b) => a.rest_date < b.rest_date ? -1 : 1); };
+const futureRests = () => myRests.filter(r => r.rest_date > todayGT());
+function renderRests() {
+  const box = $('rests'); box.replaceChildren();
+  const f = futureRests(); if (!f.length) return;
+  box.append(el('h2', { textContent: 'Próximos días de descanso' }));
+  f.slice(0, 10).forEach(r => box.append(el('div', { className: 'rest' },
+    el('b', { textContent: fmtDate(r.rest_date) }), r.reason ? el('span', { textContent: r.reason }) : '')));
+}
+// ---- Amonestaciones (solo lectura) ----
+function renderWarns() {
+  const box = $('warns'); box.replaceChildren();
+  if (!myNotes.length) return;
+  box.append(el('h2', { textContent: myNotes.length === 1 ? 'Tiene una amonestación registrada' : `Tiene ${myNotes.length} amonestaciones registradas` }));
+  myNotes.forEach(n => { const lg = n.log_id ? myLogs.find(x => x.id === n.log_id) : null;
+    box.append(el('div', { className: 'amon' },
+      el('div', { className: 'wd', textContent: new Date(n.created_at).toLocaleDateString('es-GT', { timeZone: TZ, day: 'numeric', month: 'long', year: 'numeric' }) +
+        (lg ? ` · sobre la jornada del ${fmtDate(lg.practice_date)}` : '') }),
+      el('p', { textContent: n.note }))); });
+}
 function renderHist() {
   const box = $('hist-list'); box.replaceChildren();
   if (!myLogs.length) return box.append(el('p', { className: 'info', textContent: 'Aún no tiene bitácoras registradas.' }));
@@ -74,6 +112,9 @@ function renderHist() {
     row('Herramientas', x.tools_used);
     row('Supervisión', x.supervised == null ? '' : x.supervised ? 'Trabajó bajo supervisión del encargado' : 'Sin supervisión del encargado');
     if (x.has_incident) row('Incidente', `${x.incident_description} (${x.incident_reported ? 'Se informó' : 'No se informó'} al supervisor)`, 'bad');
+    const un = x.status === 'unclosed';
+    if (un) { row('Estado', 'Jornada no concluida: la cerró el administrador', 'bad'); row('Motivo', x.admin_note, 'bad'); }
+    if (x.closed_late) { row('Cierre tardío', 'Se cerró después del día de la práctica'); row('Motivo del retraso', x.late_reason); }
     if (x.video_path) { const vb = el('div');
       body.append(el('dt', { textContent: 'Video de evidencia' }), el('dd', {}, el('button', { type: 'button', className: 'sec', textContent: 'Ver mi video',
         onclick: async () => { const r = await sb.storage.from('practice-videos').createSignedUrl(x.video_path, 300);
@@ -82,8 +123,10 @@ function renderHist() {
     const d = new Date(x.practice_date + 'T12:00:00');
     box.append(el('details', { className: 'hl' }, el('summary', {},
       el('div', { className: 'hd', textContent: d.toLocaleDateString('es-GT', { weekday: 'short', day: 'numeric', month: 'short' }) }),
-      el('div', { className: 'hm' }, el('b', { textContent: x.main_activity || 'Jornada en curso' }),
+      el('div', { className: 'hm' }, el('b', { textContent: x.main_activity || (un ? 'Jornada no concluida' : 'Jornada en curso') }),
         el('span', { textContent: `Entrada ${fmtTime(x.entry_at)}, salida ${x.exit_at ? fmtTime(x.exit_at) : '—'}` }),
+        un ? el('span', { className: 'tg', textContent: 'No concluida' }) : '',
+        x.closed_late ? el('span', { className: 'tg2', textContent: 'Cierre tardío' }) : '',
         x.has_incident ? el('span', { className: 'tg', textContent: 'Con incidente' }) : '')), body));
   });
 }
@@ -195,6 +238,8 @@ $('rec-start').onclick = () => {
 // ---- Enviar ----
 $('f-log').onsubmit = async e => { e.preventDefault(); msg('');
   const inc = radio('inc') === '1';
+  const late = log.practice_date < todayGT();   // jornada de un día anterior: el servidor exige el motivo
+  if (late && val('a-late').length < 10) { $('a-late').focus(); return msg(ERR.MOTIVO_TARDIO_REQUERIDO); }
   if (!video) return msg('Debe grabar o seleccionar un video.');
   if (inc && (!val('i-desc') || !radio('rep'))) return msg(ERR.INCIDENTE_INCOMPLETO);
   const btn = $('b-send'); btn.disabled = true; btn.textContent = 'Subiendo video…';
@@ -210,7 +255,7 @@ $('f-log').onsubmit = async e => { e.preventDefault(); msg('');
       p_tools_used: val('a-tools') || null, p_supervised: radio('sup') === '1',
       p_has_incident: inc, p_incident_description: inc ? val('i-desc') : null,
       p_incident_reported: inc ? radio('rep') === '1' : null,
-      p_video_path: path, p_video_original_name: video.name });
+      p_video_path: path, p_video_original_name: video.name, p_late_reason: late ? val('a-late') : null });
     if (error) { await sb.storage.from('practice-videos').remove([path]); throw error; } // limpia huérfano
     log = data; myLogs = [data, ...myLogs.filter(x => x.id !== data.id)]; showReceipt();
   } catch (err) { fail(err); }

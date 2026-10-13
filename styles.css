@@ -36,8 +36,25 @@ video{width:100%;border-radius:8px;margin-top:8px;background:#000}.hidden{displa
 /* vista previa de cámara más compacta (la grabación no cambia) */
 .mbox video{width:100%;height:auto;max-height:24vh;max-height:24dvh;object-fit:contain;background:#000;border-radius:8px}
 @media (max-height:620px){.mbox video{max-height:18vh;max-height:18dvh}}
-.mbox video{max-height:36vh;max-height:36dvh}.mirror{transform:scaleX(-1)}
+.mbox video{max-height:26vh;max-height:26dvh}.mirror{transform:scaleX(-1)}
 @media (max-height:620px){.mbox video{max-height:18vh;max-height:18dvh}}
 /* vista previa de cámara: altura fija y pequeña; el ancho se ajusta a la proporción real del video (vertical u horizontal) */
 .mbox video{width:auto;max-width:100%;height:28vh;height:28dvh;max-height:none;align-self:center;object-fit:contain;background:#000}
 @media (max-height:620px){.mbox video{height:20vh;height:20dvh}}
+/* punto medio */
+.mbox video{height:40vh;height:40dvh}
+@media (max-height:620px){.mbox video{height:28vh;height:28dvh}}
+
+.notice.bad{background:#fdecef;border-left-color:#b00020}
+.hl .tg2{color:#8a6213!important;font-weight:600}
+
+/* amonestaciones del estudiante (solo lectura) */
+#warns{margin-top:16px}#warns h2{font-size:1.05rem;margin:0 0 8px;color:#b00020}
+.amon{background:#fdecef;border-left:4px solid #b00020;border-radius:8px;padding:10px 12px;margin-bottom:8px}
+.amon .wd{font-size:.82rem;color:#556}.amon p{margin:4px 0 0;white-space:pre-wrap}
+
+/* días de descanso (solo lectura) */
+#rests h2{font-size:1rem;margin:14px 0 6px}
+.rest{background:#eaf4ff;border-left:4px solid #2b7bd6;border-radius:8px;padding:8px 12px;margin-bottom:6px;display:flex;flex-direction:column;gap:2px;font-size:.9rem}
+.rest span{color:#556;font-size:.82rem}
+.notice.restnow{background:#eaf4ff;border-left-color:#2b7bd6;font-size:.95rem}

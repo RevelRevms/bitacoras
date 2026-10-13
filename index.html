@@ -2,7 +2,7 @@
 <html lang="es"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Bitácora de práctica supervisada</title>
-<link rel="stylesheet" href="styles.css"></head><body><main>
+<link rel="stylesheet" href="styles.css?v=7"></head><body><main>
 <h1>Bitácora de práctica supervisada</h1>
 <div id="msg" class="err"></div>
 
@@ -23,11 +23,13 @@
 <button>Guardar perfil</button></form></section>
 
 <section id="s-home" class="card hidden"><div id="who" class="info"></div>
-<p id="today"></p><button id="b-start">INICIAR JORNADA</button></section>
+<p id="today"></p><p id="rest-today" class="notice restnow hidden"></p><button id="b-start">INICIAR JORNADA</button></section>
 
 <section id="s-form" class="hidden">
 <div class="card"><div id="who2" class="info"></div><p class="ok" id="started"></p></div>
 <form id="f-log" class="card">
+<div id="late-box" class="hidden"><p class="notice bad"><b>Esta jornada es del <span id="late-date"></span> y no se cerró ese día.</b> Complete la bitácora con lo que recuerde y explique el motivo. Quedará registrada como cierre tardío y la verá el supervisor.</p>
+<label>¿Por qué no cerró la jornada ese día?</label><textarea id="a-late" maxlength="1000" placeholder="Explique brevemente el motivo (mínimo 10 caracteres)"></textarea></div>
 <label>¿Qué actividades realizó durante esta jornada?</label><textarea id="a-act" required maxlength="4000"></textarea>
 <label>¿Cuál fue la actividad principal?</label><textarea id="a-main" required maxlength="2000"></textarea>
 <label>¿Qué aprendió o qué habilidad desarrolló?</label><textarea id="a-learn" required maxlength="4000"></textarea>
@@ -47,6 +49,8 @@
 <button id="b-send">FINALIZAR Y ENVIAR BITÁCORA</button></form></section>
 
 <section id="s-done" class="card hidden"><p class="ok">Bitácora registrada correctamente.</p><dl id="receipt"></dl></section>
+<section id="warns" class="hidden"></section>
+<section id="rests" class="hidden"></section>
 <section id="hist" class="hidden"><h2>Mi historial de bitácoras</h2><div id="hist-list"></div></section>
 <button id="b-out" class="sec hidden">Cerrar sesión</button>
 </main>
@@ -64,4 +68,4 @@
 <button type="button" id="rec-cancel" class="sec">Cancelar</button>
 </div></div></div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="supabase-config.js"></script><script src="app.js"></script></body></html>
+<script src="supabase-config.js?v=7"></script><script src="app.js?v=7"></script></body></html>

@@ -58,3 +58,44 @@ summary{list-style:none;cursor:pointer;display:flex;gap:14px;align-items:center;
 .vbar span{flex:1;font-weight:600}.vbar a{color:#9fd3bd;font-size:.88rem}
 .vclose{background:var(--gold);color:#1a1405;border:0;font-weight:700;padding:10px 16px}.vclose:hover{background:#e6b552;color:#1a1405}
 .vmodal video{flex:1;min-height:0;width:100%;height:100%;object-fit:contain;background:#000;display:block}
+
+/* ---- jornadas sin cerrar, notas y diálogos ---- */
+.sub{color:var(--mut);font-size:.85rem;margin:2px 0 8px;max-width:70ch}
+.led.late{--c:#b3263e;--g:#b3263e30;color:#8f1d31}
+.cnt em.warn{color:#8a6213}.cnt em.rei{display:inline-block;background:var(--red);color:#fff;padding:1px 8px;border-radius:3px;font-size:.76rem;margin-top:2px}
+.marks em.warn{color:#8a6213}
+.pend{border-left:4px solid var(--red)}.pend h2{color:var(--red);font-size:1rem;margin-bottom:2px}
+.prow{display:flex;gap:12px;align-items:center;flex-wrap:wrap;padding:10px 0;border-top:1px solid var(--rule)}
+.prow .who{flex:1 1 240px}.acts{display:flex;gap:8px;flex-wrap:wrap}.acts button{padding:8px 12px;font-size:.88rem}
+.tg{display:inline-block;margin-top:3px;padding:1px 8px;border-radius:3px;background:var(--red);color:#fff!important;font-size:.76rem;font-weight:600}
+.tg.soft{background:#f3e3b8;color:#6f4f0b!important}
+.tools{display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin:4px 0 12px}
+.banner{flex:1 1 260px;background:#fbeaed;border-left:4px solid var(--red);padding:8px 12px;border-radius:4px;font-size:.88rem}
+.notes{margin:4px 0 14px}.notes h4{margin:0 0 6px;font-size:.85rem;color:var(--mut);font-weight:600}
+.note{border-left:3px solid var(--gold);padding:4px 10px;margin:6px 0;background:#f4f7f5}.note.amonestacion{border-left-color:var(--red)}
+.note b{margin-right:8px}.note .d{color:var(--mut);font-size:.8rem}.note p{margin:2px 0 0;white-space:pre-wrap;max-width:70ch}
+.body dd.acts{display:flex}.body dd.notes{margin:0}
+.dlg{position:fixed;inset:0;z-index:110;background:#0d3b2ecc;display:flex;align-items:center;justify-content:center;padding:12px}
+.dlgbox{background:var(--surface);border-radius:8px;padding:16px;width:100%;max-width:460px;max-height:calc(100vh - 24px);max-height:calc(100dvh - 24px);overflow:auto;border-top:4px solid var(--gold)}
+.dlgbox h3{margin:0 0 6px;font-size:1.05rem}.dlgbox label{display:block;margin-top:10px;font-weight:600;font-size:.9rem}
+.dlgbox textarea,.dlgbox select{display:block;width:100%;margin-top:4px;padding:10px;font:inherit;border:1px solid var(--rule);border-radius:6px;background:#fff}
+.dlgacts{display:flex;gap:8px;justify-content:flex-end;margin-top:14px;flex-wrap:wrap}
+@media(max-width:640px){.prow .acts{width:100%}}
+
+/* días de descanso */
+.led.rest{--c:#2b7bd6;--g:#2b7bd630;color:#1c5aa3}
+.restbar{background:#eaf4ff;border:1px solid #b9d6f5;border-left:4px solid #2b7bd6;border-radius:8px;padding:10px 14px;margin-bottom:12px;font-weight:600;color:#1c5aa3}
+.restcard{border-left:4px solid #2b7bd6}
+.restcard>summary{cursor:pointer;list-style:none}.restcard>summary::-webkit-details-marker{display:none}
+.restcard>summary h2{display:inline;font-size:1rem;margin:0}
+.restcard>summary::after{content:" ▾";color:var(--mut)}.restcard[open]>summary::after{content:" ▴"}
+.rform{display:grid;gap:10px;margin:8px 0 14px;max-width:560px}
+.rform label{display:block;font-weight:600;font-size:.88rem}.rform input[type=date],.rform input[type=text]{display:block;width:100%;margin-top:3px}
+.rform label.chk{font-weight:400;display:flex;align-items:center;gap:6px}.rform label.chk input{width:auto;margin:0}
+.rdates{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+@media(max-width:520px){.rdates{grid-template-columns:1fr}}
+.rscope{display:flex;flex-wrap:wrap;gap:6px 18px}
+.rchecks{max-height:190px;overflow:auto;border:1px solid var(--rule);border-radius:6px;padding:6px 10px;display:grid;gap:4px}
+.ritem{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 0;border-top:1px solid var(--rule)}
+.ritem .who{display:flex;flex-direction:column;min-width:0}.ritem .who span{color:var(--mut);font-size:.84rem}
+.rpast{margin-top:8px}.rpast>summary{cursor:pointer;color:var(--mut);font-size:.88rem}
