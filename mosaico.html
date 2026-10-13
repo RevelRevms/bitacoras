@@ -1,100 +1,19 @@
 <!DOCTYPE html>
 <html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Mosaico de videos - Bitácora</title>
-<style>
-:root{--board:#0d3b2e;--paper:#0f1512;--ink:#e8f0ec;--mut:#9db0a7;--rule:#25332c;--gold:#d9a441;--red:#e0566b}
-*{box-sizing:border-box}body{margin:0;font:15px/1.4 "Segoe UI",system-ui,sans-serif;background:var(--paper);color:var(--ink)}
-.top{position:sticky;top:0;z-index:5;display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center;padding:10px 14px;background:var(--board);border-bottom:3px solid var(--gold)}
-.top h1{margin:0;font-size:1.05rem;font-weight:600;flex:1 1 100%}
-.top label{display:flex;align-items:center;gap:6px;font-size:.85rem;color:#cfe3d9}
-input,select,button{font:inherit;padding:6px 9px;border-radius:6px;border:1px solid #2f5a49;background:#133f31;color:var(--ink)}
-button{cursor:pointer}button:hover{background:#1a5340}a{color:var(--gold)}
-#info{padding:8px 14px;color:var(--mut);font-size:.85rem}.err{color:var(--red);padding:8px 14px}.hidden{display:none}
-#grid{display:grid;grid-template-columns:repeat(var(--cols,4),1fr);gap:4px;padding:4px}
-.tile{position:relative;aspect-ratio:16/9;background:#000;overflow:hidden;border-radius:4px;cursor:pointer}
-.tile video{width:100%;height:100%;object-fit:cover;display:block}
-.tile .nm{position:absolute;left:0;right:0;bottom:0;padding:14px 8px 5px;font-size:.78rem;background:linear-gradient(transparent,#000c);pointer-events:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.tile .tg{position:absolute;top:5px;right:5px;background:#b3263eE6;color:#fff;font-size:.68rem;padding:1px 6px;border-radius:9px}
-.tile .ld{position:absolute;inset:0;display:grid;place-items:center;color:var(--mut);font-size:.8rem}
-#login{max-width:340px;margin:40px auto;display:grid;gap:10px;padding:0 14px}
-.big{position:fixed;inset:0;z-index:20;background:#000;display:flex;flex-direction:column}
-.big .bar{display:flex;gap:10px;align-items:center;padding:8px 12px;background:#111}.big .bar span{flex:1}
-.big video{flex:1;min-height:0;width:100%;object-fit:contain;background:#000}
-</style></head><body>
-<form id="login" class="hidden"><h2>Mosaico de videos</h2><input id="em" type="email" placeholder="Correo" required><input id="pw" type="password" placeholder="Contraseña" required><button>Entrar</button><div id="lmsg" class="err"></div></form>
+<title>Mosaico de videos - Bitácora</title><link rel="stylesheet" href="mosaico.css?v=1"></head><body>
+<form id="login" class="lg hidden"><h1>Mosaico de videos</h1><div id="msg" class="err"></div>
+<input id="em" type="email" placeholder="Correo" required><input id="pw" type="password" placeholder="Contraseña" required><button>Entrar</button></form>
 <div id="app" class="hidden">
-<div class="top"><h1>Mosaico de videos de evidencia</h1>
-<label>Día <input type="date" id="d"></label>
-<label>Grado <select id="g"><option value="">Todos</option></select></label>
-<label>Columnas <input type="range" id="c" min="1" max="8" value="4"></label>
-<button id="pp" type="button">Pausar todos</button><button id="re" type="button">Recargar</button>
-<a href="admin.html">Panel</a></div>
-<div id="info"></div><div id="msg" class="err"></div><div id="grid"></div></div>
+<header class="bar"><b>Mosaico</b>
+<label>Fecha <input id="d" type="date"></label>
+<select id="g"><option value="">Todos los grados</option></select>
+<input id="q" placeholder="Buscar estudiante…">
+<label>Tamaño <select id="sz"><option value="160">Pequeño</option><option value="230" selected>Mediano</option><option value="340">Grande</option></select></label>
+<button id="pp" class="sec" type="button">Pausar todo</button>
+<button id="re" class="sec" type="button">Recargar</button>
+<a href="admin.html" class="sec">Panel</a><button id="out" class="sec" type="button">Salir</button>
+<span id="info"></span></header>
+<div id="msg2" class="err"></div>
+<div id="grid"></div></div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="supabase-config.js?v=7"></script>
-<script>
-const sb = supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
-const $ = id => document.getElementById(id), TZ = 'America/Guatemala';
-const todayGT = () => new Intl.DateTimeFormat('en-CA', { timeZone: TZ }).format(new Date());
-const h = (t, p = {}, ...k) => { const e = document.createElement(t);
-  for (const [a, v] of Object.entries(p)) a === 'onclick' ? e.onclick = v : e[a] = v; k.flat().forEach(x => e.append(x)); return e; };
-let items = [], paused = false, gen = 0, io;
-// Un video se descarga solo cuando su cuadro entra en pantalla; se pausa al salir.
-const watch = () => { io?.disconnect();
-  io = new IntersectionObserver(es => es.forEach(en => { const v = en.target.querySelector('video');
-    if (en.isIntersecting) { if (!v.src) { v.src = v.dataset.src; } if (!paused) v.play().catch(() => {}); en.target.querySelector('.ld')?.remove(); }
-    else v.pause(); }), { rootMargin: '150px' });
-  document.querySelectorAll('.tile').forEach(t => io.observe(t)); };
-
-function big(it) {
-  const v = h('video', { src: it.url, controls: true, autoplay: true, playsInline: true, loop: true });
-  const close = () => { v.pause(); v.removeAttribute('src'); v.load(); m.remove(); document.removeEventListener('keydown', key); };
-  const key = e => { if (e.key === 'Escape') close(); };
-  const m = h('div', { className: 'big' }, h('div', { className: 'bar' }, h('span', { textContent: it.name }),
-    h('button', { type: 'button', textContent: '✕ Cerrar', onclick: close })), v);
-  document.body.append(m); document.addEventListener('keydown', key);
-}
-async function load() {
-  const my = ++gen, day = $('d').value || todayGT();
-  $('msg').textContent = ''; $('grid').replaceChildren(); $('info').textContent = 'Cargando…';
-  const [s, l] = await Promise.all([sb.from('students').select('id,full_name,grade'),
-    sb.from('daily_logs').select('id,student_id,video_path,has_incident,status').eq('practice_date', day).not('video_path', 'is', null).limit(500)]);
-  if (my !== gen) return;
-  if (s.error || l.error) { $('info').textContent = ''; return $('msg').textContent = (s.error || l.error).message; }
-  const by = Object.fromEntries(s.data.map(x => [x.id, x]));
-  const rows = l.data;
-  if (!rows.length) { $('info').textContent = 'No hay videos para ese día.'; items = []; return; }
-  const r = await sb.storage.from('practice-videos').createSignedUrls(rows.map(x => x.video_path), 3600);   // una sola consulta; no descarga nada
-  if (my !== gen) return;
-  if (r.error) { $('info').textContent = ''; return $('msg').textContent = 'No se pudieron generar los enlaces: ' + r.error.message; }
-  const url = Object.fromEntries(r.data.map(x => [x.path, x.signedUrl]));
-  items = rows.map(x => ({ grade: by[x.student_id]?.grade || '', name: by[x.student_id]?.full_name || 'Estudiante', inc: x.has_incident, url: url[x.video_path] }))
-    .filter(x => x.url).sort((a, b) => a.name.localeCompare(b.name, 'es'));
-  const grades = [...new Set(items.map(x => x.grade))].sort();   // el filtro de grado solo oculta cuadros: no vuelve a descargar nada
-  $('g').replaceChildren(h('option', { value: '', textContent: 'Todos' }), ...grades.map(g => h('option', { value: g, textContent: g })));
-  $('info').textContent = `${items.length} ${items.length === 1 ? 'video' : 'videos'} · ${day} · sin sonido; pulsa uno para verlo grande con audio.`;
-  $('grid').replaceChildren(...items.map(it => { const v = h('video', { muted: true, loop: true, playsInline: true, preload: 'auto' });
-    v.dataset.src = it.url; v.muted = true;
-    const tl = h('div', { className: 'tile', title: it.name, onclick: () => big(it) }, v, h('div', { className: 'ld', textContent: 'Cargando…' }),
-      it.inc ? h('span', { className: 'tg', textContent: 'Incidente' }) : '', h('div', { className: 'nm', textContent: it.name })); tl.dataset.g = it.grade; return tl; }));
-  watch();
-}
-async function start() {
-  const { data: { session } } = await sb.auth.getSession();
-  if (!session) { $('login').classList.remove('hidden'); return; }
-  const r = await sb.from('user_roles').select('role').eq('user_id', session.user.id).maybeSingle();
-  if (r.data?.role !== 'admin') { $('login').classList.remove('hidden'); $('lmsg').textContent = 'Esta cuenta no tiene permisos de administrador.'; return; }
-  $('login').classList.add('hidden'); $('app').classList.remove('hidden'); $('d').value = todayGT(); load();
-}
-$('login').onsubmit = async e => { e.preventDefault();
-  const { error } = await sb.auth.signInWithPassword({ email: $('em').value, password: $('pw').value });
-  if (error) return $('lmsg').textContent = 'Credenciales incorrectas.'; start(); };
-$('d').onchange = $('re').onclick = load;
-$('g').onchange = () => { const g = $('g').value; let n = 0;
-  document.querySelectorAll('.tile').forEach(t => { const show = !g || t.dataset.g === g; t.classList.toggle('hidden', !show); if (show) n++; });
-  $('info').textContent = `${n} de ${items.length} videos`; };
-$('c').oninput = () => document.documentElement.style.setProperty('--cols', $('c').value);
-$('pp').onclick = () => { paused = !paused; $('pp').textContent = paused ? 'Reanudar todos' : 'Pausar todos';
-  document.querySelectorAll('.tile video').forEach(v => { if (paused) v.pause(); else if (v.src) v.play().catch(() => {}); }); };
-start();
-</script></body></html>
+<script src="supabase-config.js?v=7"></script><script src="mosaico.js?v=1"></script></body></html>
