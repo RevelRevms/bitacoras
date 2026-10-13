@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Mosaico de videos - Bitácora</title><link rel="stylesheet" href="mosaico.css?v=2"></head><body>
+<title>Mosaico de videos - Bitácora</title><link rel="stylesheet" href="mosaico.css?v=3"></head><body>
 <p id="boot" class="boot">Verificando sesión…</p>
 <form id="login" class="lg hidden"><h1>Mosaico de videos</h1><div id="msg" class="err"></div>
 <input id="em" type="email" placeholder="Correo" required autocomplete="username"><input id="pw" type="password" placeholder="Contraseña" required autocomplete="current-password"><button>Entrar</button></form>
@@ -10,6 +10,7 @@
 <select id="g"><option value="">Todos los grados</option></select>
 <input id="q" placeholder="Buscar estudiante…">
 <select id="mode" title="Diseño"><option value="collage">Collage</option><option value="grid">Cuadrícula</option></select>
+<select id="fit" title="Ajuste del video en el cuadro"><option value="fill">Llenar (zoom)</option><option value="contain">Completo (con franjas)</option></select>
 <button id="sh" class="sec" type="button" title="Cambiar la disposición del collage">Mezclar</button>
 <label class="sz">Tamaño <input id="sz" type="range" min="90" max="420" step="10" value="150"></label>
 <button id="pp" class="sec" type="button">Pausar todo</button>
@@ -19,4 +20,4 @@
 <div id="msg2" class="err"></div>
 <div id="grid"></div></div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="supabase-config.js?v=7"></script><script src="mosaico.js?v=2"></script></body></html>
+<script src="supabase-config.js?v=7"></script><script src="mosaico.js?v=3"></script></body></html>

@@ -7,7 +7,7 @@ const fT = d => d ? new Date(d).toLocaleTimeString('es-GT', { timeZone: TZ, hour
 const ls = k => { try { return localStorage.getItem(k) || ''; } catch { return ''; } };
 const lset = (k, v) => { try { localStorage.setItem(k, v); } catch {} };
 let students = {}, logs = [], urls = {}, paused = false, io, big, seed = 1, ready = false;
-$('sz').value = ls('mosSz') || 150; $('mode').value = ls('mosLay') === 'grid' ? 'grid' : 'collage';
+$('sz').value = ls('mosSz') || 150; $('mode').value = ls('mosLay') === 'grid' ? 'grid' : 'collage'; $('fit').value = ls('mosFit') === 'contain' ? 'contain' : 'fill';
 
 const show = (l, a) => { $('boot').classList.add('hidden'); $('login').classList.toggle('hidden', !l); $('app').classList.toggle('hidden', !a); };
 // Cierra todo: detiene y suelta los videos y borra datos y enlaces de la memoria (nada queda detrás del login).
@@ -20,8 +20,19 @@ const gate = (msg = '') => { wipe(); $('msg').textContent = msg; show(true, fals
 const expired = e => /JWT|expired|not authenticated/i.test(e?.message || '');
 // Disposición del collage: PRNG con semilla, estable hasta pulsar «Mezclar».
 const rng = a => () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
-const SHAPES = [[1, 2, 35], [1, 1, 25], [2, 2, 15], [1, 3, 10], [2, 3, 15]];   // [columnas, filas, peso]: cuadros y rectángulos
-const pick = r => { let n = r() * 100; for (const [w, hh, p] of SHAPES) if ((n -= p) < 0) return [w, hh]; return [1, 2]; };
+// Formas [columnas, filas, peso] según la proporción real del video. La celda mide ~2:1 (ancho = 2 × alto de fila),
+// así que una forma w×h tiene proporción 2w/h. Cada grupo elige formas cuya proporción se parece a la del video:
+// el recorte que queda es mínimo y casi no hay franjas negras.
+const POOLS = [
+  [1.6, 99, [[1, 1, 40], [2, 2, 35], [3, 3, 25]]],       // horizontal 16:9 (≈2.0)
+  [1.15, 1.6, [[2, 3, 60], [3, 4, 40]]],                   // 4:3 (≈1.33–1.5)
+  [0.85, 1.15, [[1, 2, 55], [2, 4, 45]]],                  // cuadrado (1.0)
+  [0.6, 0.85, [[1, 3, 55], [2, 5, 45]]],                   // vertical 3:4 (≈0.67–0.8)
+  [0, 0.6, [[1, 4, 55], [2, 7, 45]]]];                     // vertical 9:16 (≈0.5–0.57)
+const ratio = {};   // proporción ancho/alto por video, conocida al cargar sus metadatos
+const pick = (r, ar, cols) => { const pool = ar ? POOLS.find(p => ar >= p[0] && ar < p[1])[2] : [[1, 2, 100]];   // sin metadatos aún: cuadrado
+  const ok = pool.filter(p => p[0] <= cols), use = ok.length ? ok : [[1, 1, 100]], tot = use.reduce((a, p) => a + p[2], 0);
+  let n = r() * tot; for (const [w, hh, p] of use) if ((n -= p) < 0) return [w, hh]; return [use[0][0], use[0][1]]; };
 
 async function start() {
   const { data: { session } } = await sb.auth.getSession();
@@ -63,27 +74,39 @@ async function render() {
   io?.disconnect();
   io = new IntersectionObserver(es => es.forEach(e => { const v = e.target;
     if (e.isIntersecting) { if (!paused) v.play().catch(() => {}); } else v.pause(); }), { rootMargin: '150px' });
+  document.body.classList.toggle('contain', $('fit').value === 'contain');
   const sz = +$('sz').value, collage = $('mode').value === 'collage', gd = $('grid');
   document.documentElement.style.setProperty('--sz', sz + 'px');
   const cols = Math.max(2, Math.floor((gd.clientWidth || innerWidth - 16) / (sz + 4)));
   gd.style.setProperty('--cols', cols); gd.className = (collage ? 'collage' : '') + (sz < 150 ? ' sm' : '');
   $('sh').classList.toggle('hidden', !collage);
-  const all = visible(), list = all.slice(0, MAX_TILES), rnd = rng(seed);
+  const all = visible(), list = all.slice(0, MAX_TILES);
   $('info').textContent = `${all.length} ${all.length === 1 ? 'video' : 'videos'}` + (all.length > MAX_TILES ? ` (se muestran ${MAX_TILES}; filtre por grado o nombre)` : '');
   if (!list.length) return gd.replaceChildren(h('p', { className: 'empty', textContent: 'No hay videos para esa fecha y filtros.' }));
   gd.replaceChildren(...list.map(x => {
-    const [w0, hh] = pick(rnd), w = Math.min(w0, cols), s = students[x.student_id], u = urls[x.video_path];
-    const tile = (c, ...k) => { const t = h('div', { className: c + (collage ? ` k${w}${hh}` : '') }, ...k);
-      if (collage) { t.style.setProperty('--w', w); t.style.setProperty('--h', hh); } return t; };
+    const s = students[x.student_id], u = urls[x.video_path];
+    const tile = (c, ...k) => { const t = h('div', { className: c }, ...k); t._p = x.video_path; return t; };
     const cap = h('div', { className: 'cap' }, h('b', { textContent: s.full_name }),
       h('span', { textContent: `${s.grade} · ${s.practice_place} · ${fT(x.entry_at)}${x.exit_at ? '–' + fT(x.exit_at) : ''}` }));
     if (!u) return tile('tile bad', 'Video no disponible', cap);
     const v = h('video', { src: u, muted: true, loop: true, playsInline: true, preload: 'auto' });
-    v.muted = true; v.setAttribute('muted', ''); v.onerror = () => v.replaceWith(h('div', { className: 'bad' }, 'No se pudo cargar'));
+    v.muted = true; v.setAttribute('muted', '');
+    v.onloadedmetadata = () => { if (!v.videoWidth || !v.videoHeight) return;
+      const first = !ratio[x.video_path]; ratio[x.video_path] = v.videoWidth / v.videoHeight;
+      if (first) { clearTimeout(rr); rr = setTimeout(() => ready && applyShapes(), 120); } };   // reacomoda (sin recargar los videos) al llegar las proporciones v.onerror = () => v.replaceWith(h('div', { className: 'bad' }, 'No se pudo cargar'));
     io.observe(v);
     const t = tile('tile', v, cap, x.closed_late ? h('div', { className: 'tag', textContent: 'Cierre tardío' }) : '');
     t.title = 'Clic para ver en grande con sonido'; t.onclick = () => open(x, s, u); return t;
   }));
+  applyShapes();
+}
+// Asigna a cada cuadro su forma según la proporción de su video. Solo cambia estilos: los videos siguen reproduciéndose.
+function applyShapes() {
+  const gd = $('grid'), cols = +gd.style.getPropertyValue('--cols') || 2, collage = gd.classList.contains('collage'), rnd = rng(seed);
+  gd.querySelectorAll('.tile').forEach(t => { const [w, hh] = pick(rnd, ratio[t._p], cols);   // un sorteo por cuadro, siempre en el mismo orden
+    t.className = t.className.replace(/\s*k\d+\d/g, '');
+    if (collage) { t.style.setProperty('--w', w); t.style.setProperty('--h', hh); t.classList.add(`k${w}${hh}`); }
+    else { t.style.removeProperty('--w'); t.style.removeProperty('--h'); } });
 }
 function open(x, s, u) {
   if (big) return;
@@ -101,9 +124,10 @@ $('pp').onclick = () => { paused = !paused; $('pp').textContent = paused ? 'Rean
 $('d').onchange = $('re').onclick = load;
 $('g').onchange = $('q').oninput = render;
 $('sz').oninput = () => { lset('mosSz', $('sz').value); render(); };   // cambia en vivo al arrastrar
+$('fit').onchange = () => { lset('mosFit', $('fit').value); render(); };
 $('mode').onchange = () => { lset('mosLay', $('mode').value); render(); };
 $('sh').onclick = () => { seed = (seed * 7919 + 13) % 100003; render(); };
-let rz; addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(() => ready && render(), 200); });
+let rr, rz; addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(() => ready && render(), 200); });
 sb.auth.onAuthStateChange(ev => { if (ev === 'SIGNED_OUT') gate(); });
 $('login').onsubmit = async e => { e.preventDefault();
   const { error } = await sb.auth.signInWithPassword({ email: $('em').value, password: $('pw').value });
