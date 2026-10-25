@@ -2,7 +2,7 @@
 <html lang="es"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Bitácora de práctica supervisada</title>
-<link rel="stylesheet" href="styles.css?v=11"></head><body><main>
+<link rel="stylesheet" href="styles.css?v=12"></head><body><main>
 <h1>Bitácora de práctica supervisada</h1>
 <div id="msg" class="err"></div>
 
@@ -13,29 +13,34 @@
 
 <section id="s-profile" class="card hidden"><p class="info">Primera vez: complete estos datos. Solo se piden una vez.</p>
 <form id="f-profile">
-<label>Nombre completo</label><input id="p-name" required minlength="3">
-<label>Grado</label><input id="p-grade" required maxlength="100" placeholder="Ej.: Sexto perito en electrónica y dispositivos digitales">
-<label>Sección</label><input id="p-section" required>
-<label>Lugar de práctica</label><input id="p-place" required>
-<label>Empresa/institución</label><input id="p-inst">
+<label>Nombres y apellidos completos</label><input id="p-name" required minlength="3" maxlength="150" autocomplete="name" placeholder="Ej.: Juan Carlos Pérez López">
+<p class="info">Escriba primero sus nombres y luego sus apellidos.</p>
+<label>Grado</label><select id="p-gr" required><option value="">Elija su grado</option><option value="Cuarto">Cuarto</option><option value="Quinto">Quinto</option><option value="Sexto">Sexto</option></select>
+<label>Carrera</label><select id="p-car" required><option value="">Elija su carrera</option><option value="Bachillerato">Bachillerato</option><option value="Perito Contador">Perito Contador</option><option value="Secretariado Bilingüe">Secretariado Bilingüe</option><option value="Perito en Electrónica">Perito en Electrónica</option></select>
+<p class="info">Bachillerato no está disponible en Sexto.</p>
+<label>Sección</label><input id="p-section" required value="A" maxlength="10">
+<label>Empresa/institución donde realiza su práctica</label><input id="p-inst" required maxlength="200">
+<label>Dirección de la empresa de práctica</label><input id="p-place" required minlength="2" maxlength="200" placeholder="Ej.: 3.ª avenida 4-15, zona 1, municipio">
 <label>Nombre del supervisor</label><input id="p-sup">
 <label>Contacto del supervisor (opcional)</label><input id="p-supc">
 <label>Tipo de práctica</label>
 <div class="opts"><label><input type="radio" name="prog" value="practica" required> Práctica Supervisada</label><label><input type="radio" name="prog" value="prepractica"> Prepráctica</label></div>
 <p class="info">La Prepráctica se realiza un año antes de la Práctica Supervisada. Elija la que le corresponde ahora.</p>
-<label>Foto de perfil (opcional)</label>
-<div class="avrow"><div id="p-av-prev" class="av hidden"></div><input id="p-av" type="file" accept="image/*"></div>
+<label>Foto de perfil (obligatoria)</label>
+<div class="avrow"><div id="p-av-prev" class="av hidden"></div><input id="p-av" type="file" accept="image/*" required></div>
 <p class="info">Se mostrará en el sistema junto a su nombre. Use una foto de su rostro, sin otras personas.</p>
 <button>Guardar perfil</button></form></section>
 
-<section id="s-extra" class="card hidden"><p class="info">Falta un dato para continuar. Solo se pide una vez.</p>
+<section id="s-extra" class="card hidden"><p class="info">Faltan datos para continuar. Solo se piden una vez.</p>
 <form id="f-extra">
+<div id="x-prog">
 <label>Tipo de práctica</label>
-<div class="opts"><label><input type="radio" name="prog2" value="practica" required> Práctica Supervisada</label><label><input type="radio" name="prog2" value="prepractica"> Prepráctica</label></div>
-<p class="info">La Prepráctica se realiza un año antes de la Práctica Supervisada. Elija la que le corresponde ahora.</p>
-<label>Foto de perfil (opcional)</label>
+<div class="opts"><label><input type="radio" name="prog2" value="practica"> Práctica Supervisada</label><label><input type="radio" name="prog2" value="prepractica"> Prepráctica</label></div>
+<p class="info">La Prepráctica se realiza un año antes de la Práctica Supervisada. Elija la que le corresponde ahora.</p></div>
+<div id="x-avb">
+<label>Foto de perfil (obligatoria)</label>
 <div class="avrow"><div id="x-av-prev" class="av hidden"></div><input id="x-av" type="file" accept="image/*"></div>
-<p class="info">Se mostrará en el sistema junto a su nombre. Use una foto de su rostro, sin otras personas.</p>
+<p class="info">Se mostrará en el sistema junto a su nombre. Use una foto de su rostro, sin otras personas.</p></div>
 <button>Guardar y continuar</button></form></section>
 
 <section id="s-home" class="card hidden"><div class="me"><div id="me-av" class="av"></div><div id="who" class="info"></div></div>
@@ -111,4 +116,4 @@
 <button type="button" id="pic-cancel" class="sec">Cancelar</button>
 </div></div></div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="supabase-config.js?v=8"></script><script src="app.js?v=11"></script></body></html>
+<script src="supabase-config.js?v=8"></script><script src="app.js?v=12"></script></body></html>

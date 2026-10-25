@@ -78,7 +78,7 @@ async function ensureUrls() {   // firma de una sola vez los videos que se van a
 }
 const visible = () => { const q = $('q').value.toLowerCase(), g = $('g').value;
   return logs.filter(x => { const s = students[x.student_id]; const pf = $('pg').value, lp = x.program || s?.program || '';
-    return s && (!g || s.grade === g) && (!pf || (pf === 'none' ? !lp : lp === pf)) && (`${s.full_name} ${s.practice_place}`).toLowerCase().includes(q); }); };
+    return s && (!g || s.grade === g) && (!pf || (pf === 'none' ? !lp : lp === pf)) && (`${s.full_name} ${s.institution || ''} ${s.practice_place}`).toLowerCase().includes(q); }); };
 async function render() {
   if (!ready || !await ensureUrls() || !ready) return;
   io?.disconnect();
@@ -99,7 +99,7 @@ async function render() {
     const av = avs[s.avatar_path], lp = x.program || s.program;
     const cap = h('div', { className: 'cap' + (av ? ' wav' : '') }, av ? h('i', { className: 'av', style: `background-image:url("${av}")` }) : '',
       h('b', { textContent: s.full_name }),
-      h('span', { textContent: `${PROG[lp] ? PROG[lp] + ' · ' : ''}${s.grade} · ${s.practice_place} · ${fT(x.entry_at)}${x.exit_at ? '–' + fT(x.exit_at) : ''}` }));
+      h('span', { textContent: `${PROG[lp] ? PROG[lp] + ' · ' : ''}${s.grade} · ${s.institution || s.practice_place} · ${fT(x.entry_at)}${x.exit_at ? '–' + fT(x.exit_at) : ''}` }));
     if (!u) return tile('tile bad', 'Video no disponible', cap);
     const v = h('video', { src: u, muted: true, loop: true, playsInline: true, preload: 'auto' });
     v.muted = true; v.setAttribute('muted', '');

@@ -18,6 +18,8 @@ const ERR = {
   PROGRAMA_PENDIENTE: 'Primero indique su tipo de práctica.',
   PROGRAMA_YA_DEFINIDO: 'El tipo de práctica ya está definido. Solo el administrador puede cambiarlo.',
   PROGRAMA_INVALIDO: 'Elija el tipo de práctica.',
+  AVATAR_REQUERIDO: 'La foto de perfil es obligatoria.',
+  CARRERA_INVALIDA: 'Bachillerato no está disponible en Sexto.',
   VIDEO_REQUERIDO: 'Falta el video de evidencia: grábelo o súbalo en «Evidencias de la jornada» antes de cerrar.',
   RUTA_VIDEO_INVALIDA: 'El video no corresponde a esta jornada. Revise la fecha y hora de su dispositivo.',
   FOTO_INICIO_REQUERIDA: 'Tome la foto de inicio antes de iniciar la jornada.',
@@ -54,7 +56,10 @@ async function route() {
   if (r1.error) return fail(r1.error);
   student = r1.data;
   if (!student) return show('s-profile');
-  if (!student.program && student.active !== false) return show('s-extra');   // estudiantes anteriores: definen su tipo de práctica una sola vez
+  if (student.active !== false && (!student.program || !student.avatar_path)) {   // estudiantes anteriores: completan lo que falta una sola vez
+    $('x-prog').classList.toggle('hidden', !!student.program); $('x-avb').classList.toggle('hidden', !!student.avatar_path);
+    $('x-av').required = !student.avatar_path;
+    return show('s-extra'); }
   const [r2, r3, r4] = await Promise.all([
     sb.from('daily_logs').select('*').eq('student_id', user.id).order('practice_date', { ascending: false }).limit(400),
     sb.from('admin_notes').select('*').eq('student_id', user.id).order('created_at', { ascending: false }),
@@ -62,8 +67,8 @@ async function route() {
   if (r2.error) return fail(r2.error);
   myLogs = r2.data; log = myLogs[0]; myNotes = r3.error ? [] : (r3.data || []);
   myRests = r4.error ? [] : dedupRests(r4.data || []);
-  const info = `${student.full_name} · ${PROG[student.program] || 'Tipo sin definir'} · ${student.grade} ${student.section} · ${student.practice_place}` +
-    (student.institution ? ` · ${student.institution}` : '') + (student.supervisor_name ? ` · Supervisor: ${student.supervisor_name}` : '');
+  const info = `${student.full_name} · ${PROG[student.program] || 'Tipo sin definir'} · ${student.grade} ${student.section}` +
+    (student.institution ? ` · ${student.institution}` : '') + ` · ${student.practice_place}` + (student.supervisor_name ? ` · Supervisor: ${student.supervisor_name}` : '');
   $('who').textContent = $('who2').textContent = info;
   showAvatars();
   if (log?.status === 'in_progress') {
@@ -86,7 +91,7 @@ async function route() {
 
 function showReceipt() {
   const rows = [['Estudiante', student.full_name], ['Fecha', fmtDate(log.practice_date)],
-    ['Entrada', fmtTime(log.entry_at)], ['Salida', fmtTime(log.exit_at)], ['Lugar', log.practice_place],
+    ['Entrada', fmtTime(log.entry_at)], ['Salida', fmtTime(log.exit_at)], ['Dirección de la empresa', log.practice_place],
     ['Actividad principal', log.main_activity],
     ['Evidencia', log.start_photo_path ? 'Foto de inicio y video cargados correctamente' : 'Video cargado correctamente']];
   if (log.closed_late) rows.splice(4, 0, ['Cierre', 'Tardío (jornada de un día anterior)']);
@@ -152,6 +157,11 @@ const pickAvatar = (prevId, set) => async e => {
   catch (err) { e.target.value = ''; msg(err.message); } };
 $('p-av').onchange = pickAvatar('p-av-prev', b => pAv = b);
 $('x-av').onchange = pickAvatar('x-av-prev', b => xAv = b);
+// Grado y carrera: Bachillerato no se ofrece en Sexto (las opciones incompatibles se desactivan)
+const syncCareer = () => { const g = $('p-gr').value, c = $('p-car').value;
+  [...$('p-car').options].forEach(o => o.disabled = o.value === 'Bachillerato' && g === 'Sexto');
+  [...$('p-gr').options].forEach(o => o.disabled = o.value === 'Sexto' && c === 'Bachillerato'); };
+$('p-gr').onchange = $('p-car').onchange = syncCareer;
 
 // ---- Evidencias de la jornada abierta ----
 function renderEvidence() {
@@ -251,25 +261,31 @@ $('b-out').onclick = async () => { await sb.auth.signOut(); route(); };
 
 $('f-profile').onsubmit = async e => { e.preventDefault(); msg('');
   const prog = radio('prog'); if (!prog) return msg(ERR.PROGRAMA_INVALIDO);
+  const gr = $('p-gr').value, car = $('p-car').value;
+  if (!gr || !car) return msg('Elija su grado y su carrera.');
+  if (gr === 'Sexto' && car === 'Bachillerato') return msg(ERR.CARRERA_INVALIDA);
+  if (!pAv) return msg(ERR.AVATAR_REQUERIDO);
   const btn = e.submitter || e.target.querySelector('button'); btn.disabled = true;
   let avPath = null;
   try {
     if (pAv) avPath = await uploadAvatar(pAv);
     const { error } = await sb.from('students').insert({ id: user.id, full_name: val('p-name'),
-      grade: val('p-grade'), section: val('p-section'), practice_place: val('p-place'),
-      institution: val('p-inst') || null, supervisor_name: val('p-sup') || null,
+      grade: `${gr} ${car}`, section: val('p-section'), practice_place: val('p-place'),
+      institution: val('p-inst'), supervisor_name: val('p-sup') || null,
       supervisor_contact: val('p-supc') || null, program: prog, avatar_path: avPath });
     if (error) { if (avPath) await sb.storage.from(PH).remove([avPath]); throw error; }
   } catch (err) { btn.disabled = false; return fail(err); }
   btn.disabled = false; pAv = null; route(); };
 
-// Estudiantes que ya tenían perfil: definen su tipo de práctica (y, si quieren, su foto) una sola vez.
+// Estudiantes que ya tenían perfil: definen una sola vez el tipo de práctica y la foto de perfil que les falten.
 $('f-extra').onsubmit = async e => { e.preventDefault(); msg('');
-  const prog = radio('prog2'); if (!prog) return msg(ERR.PROGRAMA_INVALIDO);
+  const needProg = !student.program, needAv = !student.avatar_path;
+  const prog = needProg ? radio('prog2') : null; if (needProg && !prog) return msg(ERR.PROGRAMA_INVALIDO);
+  if (needAv && !xAv) return msg(ERR.AVATAR_REQUERIDO);
   const btn = e.target.querySelector('button'); btn.disabled = true;
   let avPath = null;
   try {
-    if (xAv) avPath = await uploadAvatar(xAv);
+    if (needAv) avPath = await uploadAvatar(xAv);
     const { error } = await sb.rpc('update_my_profile', { p_program: prog, p_avatar_path: avPath });
     if (error) { if (avPath) await sb.storage.from(PH).remove([avPath]); throw error; }
   } catch (err) { btn.disabled = false; return fail(err); }

@@ -203,7 +203,7 @@ function renderPending(today, byId) {
         s ? avatar(s, 'mk sm') : '',
         h('div', { className: 'who' }, h('b', { textContent: s ? s.full_name : 'Estudiante' }),
           h('span', { textContent: `${fD(x.practice_date)} · hace ${dias(dayDiff(x.practice_date, today))} · entrada ${fT(x.entry_at)}` }),
-          h('span', { textContent: s ? [s.practice_place, s.institution].filter(Boolean).join(', ') : '' }),
+          h('span', { textContent: s ? [s.institution, s.practice_place].filter(Boolean).join(', ') : '' }),
           m >= REINC_N ? h('span', { className: 'tg', textContent: `Reincidente: ${m} sin cerrar a tiempo en ${REINC_DIAS} días` })
             : m > 1 ? h('span', { className: 'tg soft', textContent: `${m} sin cerrar a tiempo en ${REINC_DIAS} días` }) : ''),
         h('div', { className: 'acts' },
@@ -327,7 +327,7 @@ function studentRow(s) {
     !s.program ? h('button', { type: 'button', className: 'sec', textContent: 'Asignar Prepráctica', onclick: () => setProgramFirst(s, 'prepractica') }) : '');
   return h('details', { className: 'stu' + (s.active ? '' : ' off'), id: 'stu-' + s.id }, h('summary', {}, avatar(s),
     h('div', { className: 'who' }, h('b', { textContent: s.full_name + (s.active ? '' : ' (inactivo)') }), s.active ? '' : h('span', { className: 'pg off', textContent: 'Inactivo' }), h('span', { className: 'pg ' + (s.program || 'none'), textContent: progName(s.program) }), led,
-      h('div', { className: 'facts' }, fact('Tipo de práctica', progName(s.program)), fact('Lugar de práctica', s.practice_place), fact('Empresa o institución', s.institution),
+      h('div', { className: 'facts' }, fact('Tipo de práctica', progName(s.program)), fact('Empresa o institución', s.institution), fact('Dirección de la empresa', s.practice_place),
         fact('Supervisor', s.supervisor_name), fact('Contacto del supervisor', s.supervisor_contact),
         fact('Grado y sección', `${s.grade}, sección ${s.section}`))),
     h('div', { className: 'cnt' }, h('b', { textContent: n }), n === 1 ? ' bitácora' : ' bitácoras',
