@@ -68,6 +68,17 @@ const avUrl = s => s.avatar_path && avs[s.avatar_path]?.u || '';
 const ini = s => s.full_name.split(/\s+/).slice(0, 2).map(w => w[0]).join('').toUpperCase();
 function avatar(s, cls = 'mk') { const u = avUrl(s);
   return u ? h('div', { className: cls + ' pic', role: 'img', ariaLabel: s.full_name, style: `background-image:url("${u}")` }) : h('div', { className: cls, textContent: ini(s) }); }
+async function setActive(s) {
+  const on = !s.active;
+  const hasOpen = logs.some(x => x.student_id === s.id && x.status === 'in_progress');
+  const txt = on ? `¿Activar a ${s.full_name}? Podrá iniciar jornadas de nuevo.`
+    : `¿Inactivar a ${s.full_name}? No podrá iniciar nuevas jornadas ni cambiar su perfil. Podrá entrar y ver su historial. Sus bitácoras se conservan.` +
+      (hasOpen ? '\n\nTiene una jornada abierta: podrá cerrarla, o puede cerrarla usted como no concluida.' : '');
+  if (!confirm(txt)) return;
+  const { error } = await sb.from('students').update({ active: on }).eq('id', s.id);
+  if (error) alert(errText(error));
+  await load();
+}
 async function setProgram(s) {
   const to = s.program === 'prepractica' ? 'practica' : 'prepractica';
   if (!confirm(`¿Cambiar a ${s.full_name} de ${progName(s.program)} a ${progName(to)}? Las bitácoras anteriores conservan el tipo con que se hicieron.`)) return;
@@ -169,8 +180,8 @@ function render() {
   sel.replaceChildren(h('option', { value: '', textContent: 'Todos los grados' }), ...grades.map(g => h('option', { value: g, textContent: g })));
   sel.value = cur;
   const q = $('q').value.toLowerCase();
-  const pf = $('pg').value;
-  const list = students.filter(s => (!sel.value || s.grade === sel.value) && (!pf || (pf === 'none' ? !s.program : s.program === pf)) && (!kf || FILT[kf](s)) &&
+  const pf = $('pg').value, af = $('ac').value;
+  const list = students.filter(s => (!sel.value || s.grade === sel.value) && (!pf || (pf === 'none' ? !s.program : s.program === pf)) && (!af || (af === 'on') === s.active) && (!kf || FILT[kf](s)) &&
     (`${s.full_name} ${s.practice_place} ${s.institution || ''} ${s.supervisor_name || ''}`).toLowerCase().includes(q));
   const openIds = new Set([...document.querySelectorAll('#list details[open]')].map(d => d.id));   // conserva lo expandido
   const note = kf ? h('div', { className: 'fnote' }, `Filtro: ${NAMES[kf]}. ${list.length} ${list.length === 1 ? 'estudiante' : 'estudiantes'}.`,
@@ -310,11 +321,12 @@ function studentRow(s) {
   const tools = h('div', { className: 'tools' },
     rei ? h('div', { className: 'banner', textContent: `Reincidente: ${m.length} jornadas sin cerrar a tiempo en los últimos ${REINC_DIAS} días. Considere registrar una amonestación.` }) : '',
     h('button', { type: 'button', className: 'sec', textContent: 'Registrar nota o amonestación', onclick: () => addNote(s) }),
+    h('button', { type: 'button', className: s.active ? 'sec' : '', textContent: s.active ? 'Inactivar estudiante' : 'Activar estudiante', onclick: () => setActive(s) }),
     s.program ? h('button', { type: 'button', className: 'sec', textContent: `Pasar a ${progName(s.program === 'prepractica' ? 'practica' : 'prepractica')}`, onclick: () => setProgram(s) })
       : h('button', { type: 'button', className: 'sec', textContent: 'Asignar Práctica Supervisada', onclick: () => setProgramFirst(s, 'practica') }),
     !s.program ? h('button', { type: 'button', className: 'sec', textContent: 'Asignar Prepráctica', onclick: () => setProgramFirst(s, 'prepractica') }) : '');
-  return h('details', { className: 'stu', id: 'stu-' + s.id }, h('summary', {}, avatar(s),
-    h('div', { className: 'who' }, h('b', { textContent: s.full_name + (s.active ? '' : ' (inactivo)') }), h('span', { className: 'pg ' + (s.program || 'none'), textContent: progName(s.program) }), led,
+  return h('details', { className: 'stu' + (s.active ? '' : ' off'), id: 'stu-' + s.id }, h('summary', {}, avatar(s),
+    h('div', { className: 'who' }, h('b', { textContent: s.full_name + (s.active ? '' : ' (inactivo)') }), s.active ? '' : h('span', { className: 'pg off', textContent: 'Inactivo' }), h('span', { className: 'pg ' + (s.program || 'none'), textContent: progName(s.program) }), led,
       h('div', { className: 'facts' }, fact('Tipo de práctica', progName(s.program)), fact('Lugar de práctica', s.practice_place), fact('Empresa o institución', s.institution),
         fact('Supervisor', s.supervisor_name), fact('Contacto del supervisor', s.supervisor_contact),
         fact('Grado y sección', `${s.grade}, sección ${s.section}`))),
@@ -399,5 +411,5 @@ $('login').onsubmit = async e => { e.preventDefault();
   if (error) return $('msg').textContent = 'Credenciales incorrectas.'; start(); };
 $('out').onclick = async () => { await sb.auth.signOut(); $('msg').textContent = ''; show(true, false); };
 $('re').onclick = load;
-$('q').oninput = $('g').onchange = $('pg').onchange = render;
+$('q').oninput = $('g').onchange = $('pg').onchange = $('ac').onchange = render;
 start();

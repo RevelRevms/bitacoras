@@ -54,7 +54,7 @@ async function route() {
   if (r1.error) return fail(r1.error);
   student = r1.data;
   if (!student) return show('s-profile');
-  if (!student.program) return show('s-extra');   // estudiantes anteriores: definen su tipo de práctica una sola vez
+  if (!student.program && student.active !== false) return show('s-extra');   // estudiantes anteriores: definen su tipo de práctica una sola vez
   const [r2, r3, r4] = await Promise.all([
     sb.from('daily_logs').select('*').eq('student_id', user.id).order('practice_date', { ascending: false }).limit(400),
     sb.from('admin_notes').select('*').eq('student_id', user.id).order('created_at', { ascending: false }),
@@ -62,7 +62,7 @@ async function route() {
   if (r2.error) return fail(r2.error);
   myLogs = r2.data; log = myLogs[0]; myNotes = r3.error ? [] : (r3.data || []);
   myRests = r4.error ? [] : dedupRests(r4.data || []);
-  const info = `${student.full_name} · ${PROG[student.program]} · ${student.grade} ${student.section} · ${student.practice_place}` +
+  const info = `${student.full_name} · ${PROG[student.program] || 'Tipo sin definir'} · ${student.grade} ${student.section} · ${student.practice_place}` +
     (student.institution ? ` · ${student.institution}` : '') + (student.supervisor_name ? ` · Supervisor: ${student.supervisor_name}` : '');
   $('who').textContent = $('who2').textContent = info;
   showAvatars();
@@ -78,6 +78,8 @@ async function route() {
   const rt = myRests.find(r => r.rest_date === todayGT());   // el servidor también lo impide (DIA_DE_DESCANSO)
   $('b-start').classList.toggle('hidden', !!rt); $('start-box').classList.toggle('hidden', !!rt);
   $('rest-today').classList.toggle('hidden', !rt); updateStart();
+  if (student.active === false) { $('b-start').classList.add('hidden'); $('start-box').classList.add('hidden'); }
+  $('inactive-note').classList.toggle('hidden', student.active !== false);
   $('rest-today').textContent = rt ? 'Hoy es día de descanso' + (rt.reason ? ': ' + rt.reason : '') + '. No necesita iniciar jornada.' : '';
   show('s-home');
 }
