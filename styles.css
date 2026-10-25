@@ -58,3 +58,13 @@ video{width:100%;border-radius:8px;margin-top:8px;background:#000}.hidden{displa
 .rest{background:#eaf4ff;border-left:4px solid #2b7bd6;border-radius:8px;padding:8px 12px;margin-bottom:6px;display:flex;flex-direction:column;gap:2px;font-size:.9rem}
 .rest span{color:#556;font-size:.82rem}
 .notice.restnow{background:#eaf4ff;border-left-color:#2b7bd6;font-size:.95rem}
+
+/* avatar, foto de inicio y evidencias */
+.me{display:flex;gap:12px;align-items:center}.me .info{flex:1}.me .ok{margin:0}
+.av{flex:none;width:52px;height:52px;border-radius:50%;background:#dfe6ee center/cover no-repeat;color:#14507a;font-weight:700;display:flex;align-items:center;justify-content:center;border:2px solid #fff;box-shadow:0 0 0 1px #b9c2cf}
+.av.hidden{display:none}
+.avrow{display:flex;gap:12px;align-items:center}.avrow input{flex:1}.avrow .av{width:64px;height:64px}
+.thumb{width:100%;max-height:240px;object-fit:cover;border-radius:8px;margin-top:8px;background:#000}
+button.small{width:auto;padding:8px 12px;margin-top:8px;font-size:.9rem}
+.eh{font-size:1.05rem;margin:0 0 6px}#ev-photo{margin:6px 0}#ev-photo button{margin:0 0 0 6px;vertical-align:middle}
+.imgbox img{width:100%;max-height:72vh;max-height:72dvh;object-fit:contain;border-radius:8px;background:#000;display:block}

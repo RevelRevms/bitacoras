@@ -6,7 +6,8 @@ const todayGT = () => new Intl.DateTimeFormat('en-CA', { timeZone: TZ }).format(
 const fT = d => d ? new Date(d).toLocaleTimeString('es-GT', { timeZone: TZ, hour12: false, hour: '2-digit', minute: '2-digit' }) : '';
 const ls = k => { try { return localStorage.getItem(k) || ''; } catch { return ''; } };
 const lset = (k, v) => { try { localStorage.setItem(k, v); } catch {} };
-let students = {}, logs = [], urls = {}, paused = false, io, big, seed = 1, ready = false;
+const PROG = { practica: 'Práctica Supervisada', prepractica: 'Prepráctica' };
+let students = {}, logs = [], urls = {}, avs = {}, paused = false, io, big, seed = 1, ready = false;
 $('sz').value = ls('mosSz') || 150; $('mode').value = ls('mosLay') === 'grid' ? 'grid' : 'collage'; $('fit').value = ls('mosFit') === 'contain' ? 'contain' : 'fill';
 
 const show = (l, a) => { $('boot').classList.add('hidden'); $('login').classList.toggle('hidden', !l); $('app').classList.toggle('hidden', !a); };
@@ -14,7 +15,7 @@ const show = (l, a) => { $('boot').classList.add('hidden'); $('login').classList
 function wipe() {
   ready = false; io?.disconnect(); big?.querySelector('.t button')?.click();
   document.querySelectorAll('video').forEach(v => { v.pause(); v.removeAttribute('src'); v.load(); });
-  $('grid').replaceChildren(); students = {}; logs = []; urls = {}; $('info').textContent = ''; $('msg2').textContent = '';
+  $('grid').replaceChildren(); students = {}; logs = []; urls = {}; avs = {}; $('info').textContent = ''; $('msg2').textContent = '';
 }
 const gate = (msg = '') => { wipe(); $('msg').textContent = msg; show(true, false); };
 const expired = e => /JWT|expired|not authenticated/i.test(e?.message || '');
@@ -40,7 +41,7 @@ async function start() {
   const r = await sb.from('user_roles').select('role').eq('user_id', session.user.id).maybeSingle();
   if (r.data?.role !== 'admin') return gate('Esta cuenta no tiene permisos de administrador.');
   show(false, true); ready = true;
-  const s = await sb.from('students').select('id,full_name,grade,practice_place,institution');
+  const s = await sb.from('students').select('id,full_name,grade,practice_place,institution,program,avatar_path');
   if (s.error) return expired(s.error) ? gate('Su sesión venció. Entre de nuevo.') : $('msg2').textContent = s.error.message;
   if (!ready) return;
   students = Object.fromEntries(s.data.map(x => [x.id, x]));
@@ -53,12 +54,20 @@ async function start() {
 async function load() {
   if (!ready) return;
   $('msg2').textContent = ''; $('grid').replaceChildren(h('p', { className: 'empty', textContent: 'Cargando…' }));
-  const l = await sb.from('daily_logs').select('id,student_id,practice_date,entry_at,exit_at,status,closed_late,video_path,main_activity')
+  const l = await sb.from('daily_logs').select('id,student_id,practice_date,entry_at,exit_at,status,closed_late,video_path,main_activity,program')
     .eq('practice_date', $('d').value).not('video_path', 'is', null).order('entry_at').limit(500);
   if (l.error) return expired(l.error) ? gate('Su sesión venció. Entre de nuevo.') : $('msg2').textContent = l.error.message;
   if (!ready) return;
   logs = l.data; urls = {};
+  await signAvatars();
+  if (!ready) return;
   render();
+}
+async function signAvatars() {   // avatares de los estudiantes del día, firmados en un solo lote
+  const need = [...new Set(logs.map(x => students[x.student_id]?.avatar_path).filter(p => p && !avs[p]))];
+  if (!need.length) return;
+  try { const r = await sb.storage.from('practice-photos').createSignedUrls(need, TTL);
+    if (!r.error) r.data.forEach(x => { if (x.signedUrl) avs[x.path] = x.signedUrl; }); } catch {}
 }
 async function ensureUrls() {   // firma de una sola vez los videos que se van a mostrar y aún no tienen enlace
   const need = visible().slice(0, MAX_TILES).map(x => x.video_path).filter(p => !urls[p]);
@@ -68,7 +77,8 @@ async function ensureUrls() {   // firma de una sola vez los videos que se van a
   r.data.forEach(x => { if (x.signedUrl) urls[x.path] = x.signedUrl; }); return true;
 }
 const visible = () => { const q = $('q').value.toLowerCase(), g = $('g').value;
-  return logs.filter(x => { const s = students[x.student_id]; return s && (!g || s.grade === g) && (`${s.full_name} ${s.practice_place}`).toLowerCase().includes(q); }); };
+  return logs.filter(x => { const s = students[x.student_id]; const pf = $('pg').value, lp = x.program || s?.program || '';
+    return s && (!g || s.grade === g) && (!pf || (pf === 'none' ? !lp : lp === pf)) && (`${s.full_name} ${s.practice_place}`).toLowerCase().includes(q); }); };
 async function render() {
   if (!ready || !await ensureUrls() || !ready) return;
   io?.disconnect();
@@ -86,8 +96,10 @@ async function render() {
   gd.replaceChildren(...list.map(x => {
     const s = students[x.student_id], u = urls[x.video_path];
     const tile = (c, ...k) => { const t = h('div', { className: c }, ...k); t._p = x.video_path; return t; };
-    const cap = h('div', { className: 'cap' }, h('b', { textContent: s.full_name }),
-      h('span', { textContent: `${s.grade} · ${s.practice_place} · ${fT(x.entry_at)}${x.exit_at ? '–' + fT(x.exit_at) : ''}` }));
+    const av = avs[s.avatar_path], lp = x.program || s.program;
+    const cap = h('div', { className: 'cap' + (av ? ' wav' : '') }, av ? h('i', { className: 'av', style: `background-image:url("${av}")` }) : '',
+      h('b', { textContent: s.full_name }),
+      h('span', { textContent: `${PROG[lp] ? PROG[lp] + ' · ' : ''}${s.grade} · ${s.practice_place} · ${fT(x.entry_at)}${x.exit_at ? '–' + fT(x.exit_at) : ''}` }));
     if (!u) return tile('tile bad', 'Video no disponible', cap);
     const v = h('video', { src: u, muted: true, loop: true, playsInline: true, preload: 'auto' });
     v.muted = true; v.setAttribute('muted', '');
@@ -116,13 +128,13 @@ function open(x, s, u) {
   const k = e => { if (e.key === 'Escape') close(); };
   const b = h('button', { type: 'button', textContent: '✕ Cerrar', onclick: close });
   big = h('div', { className: 'big', role: 'dialog', ariaModal: 'true' }, h('div', { className: 't' },
-    h('span', { textContent: `${s.full_name} · ${x.practice_date}${x.main_activity ? ' · ' + x.main_activity : ''}` }), b), v);
+    h('span', { textContent: `${s.full_name} · ${PROG[x.program || s.program] ? PROG[x.program || s.program] + ' · ' : ''}${x.practice_date}${x.main_activity ? ' · ' + x.main_activity : ''}` }), b), v);
   document.body.append(big); document.body.classList.add('noscroll'); document.addEventListener('keydown', k); b.focus();
 }
 $('pp').onclick = () => { paused = !paused; $('pp').textContent = paused ? 'Reanudar todo' : 'Pausar todo';
   document.querySelectorAll('#grid video').forEach(v => paused ? v.pause() : v.play().catch(() => {})); };
 $('d').onchange = $('re').onclick = load;
-$('g').onchange = $('q').oninput = render;
+$('g').onchange = $('pg').onchange = $('q').oninput = render;
 $('sz').oninput = () => { lset('mosSz', $('sz').value); render(); };   // cambia en vivo al arrastrar
 $('fit').onchange = () => { lset('mosFit', $('fit').value); render(); };
 $('mode').onchange = () => { lset('mosLay', $('mode').value); render(); };

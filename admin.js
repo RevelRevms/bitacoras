@@ -2,7 +2,9 @@ const sb = supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
 const $ = id => document.getElementById(id), TZ = 'America/Guatemala';
 // Reincidente = REINC_N o más jornadas sin cerrar a tiempo en los últimos REINC_DIAS días (ajuste estos dos números a su criterio).
 const REINC_N = 3, REINC_DIAS = 30;
-let students = [], logs = [], notes = [], rests = [], kf = '';   // kf = filtro activo de los indicadores superiores
+const PROG = { practica: 'Práctica Supervisada', prepractica: 'Prepráctica' };
+const progName = p => PROG[p] || 'Sin definir';
+let students = [], logs = [], notes = [], rests = [], kf = '', avs = {};   // kf = filtro activo de los indicadores superiores
 const h = (t, p = {}, ...k) => { const e = document.createElement(t);
   for (const [a, v] of Object.entries(p)) a === 'onclick' ? e.onclick = v : e[a] = v;
   k.flat().forEach(x => e.append(x)); return e; };
@@ -49,8 +51,35 @@ async function load() {
   if (s.error || l.error) return $('msg').textContent = (s.error || l.error).message;
   students = s.data; logs = l.data; notes = n.error ? [] : n.data;
   rests = rd.error ? [] : (rd.data || []);
+  await loadAvatars();
   $('msg').textContent = n.error || rd.error ? 'Algunas funciones no están disponibles (¿ya ejecutó migracion_v2.sql en Supabase?).' : '';
   render();
+}
+
+// ---- Avatares: enlaces firmados en un solo lote; se reutilizan mientras no estén por vencer ----
+async function loadAvatars() {
+  const now = Date.now(), need = students.map(s => s.avatar_path).filter(p => p && !(avs[p] && avs[p].t > now));
+  if (!need.length) return;
+  try { const r = await sb.storage.from('practice-photos').createSignedUrls(need, 3600);
+    if (r.error) return;
+    r.data.forEach(x => { if (x.signedUrl) avs[x.path] = { u: x.signedUrl, t: now + 3000e3 }; }); } catch {}
+}
+const avUrl = s => s.avatar_path && avs[s.avatar_path]?.u || '';
+const ini = s => s.full_name.split(/\s+/).slice(0, 2).map(w => w[0]).join('').toUpperCase();
+function avatar(s, cls = 'mk') { const u = avUrl(s);
+  return u ? h('div', { className: cls + ' pic', role: 'img', ariaLabel: s.full_name, style: `background-image:url("${u}")` }) : h('div', { className: cls, textContent: ini(s) }); }
+async function setProgram(s) {
+  const to = s.program === 'prepractica' ? 'practica' : 'prepractica';
+  if (!confirm(`¿Cambiar a ${s.full_name} de ${progName(s.program)} a ${progName(to)}? Las bitácoras anteriores conservan el tipo con que se hicieron.`)) return;
+  const { error } = await sb.from('students').update({ program: to }).eq('id', s.id);
+  if (error) alert(errText(error));
+  await load();
+}
+async function setProgramFirst(s, to) {
+  if (!confirm(`¿Asignar «${progName(to)}» a ${s.full_name}?`)) return;
+  const { error } = await sb.from('students').update({ program: to }).eq('id', s.id);
+  if (error) alert(errText(error));
+  await load();
 }
 
 // ---- Cuadro de diálogo para pedir un motivo o nota ----
@@ -140,7 +169,8 @@ function render() {
   sel.replaceChildren(h('option', { value: '', textContent: 'Todos los grados' }), ...grades.map(g => h('option', { value: g, textContent: g })));
   sel.value = cur;
   const q = $('q').value.toLowerCase();
-  const list = students.filter(s => (!sel.value || s.grade === sel.value) && (!kf || FILT[kf](s)) &&
+  const pf = $('pg').value;
+  const list = students.filter(s => (!sel.value || s.grade === sel.value) && (!pf || (pf === 'none' ? !s.program : s.program === pf)) && (!kf || FILT[kf](s)) &&
     (`${s.full_name} ${s.practice_place} ${s.institution || ''} ${s.supervisor_name || ''}`).toLowerCase().includes(q));
   const openIds = new Set([...document.querySelectorAll('#list details[open]')].map(d => d.id));   // conserva lo expandido
   const note = kf ? h('div', { className: 'fnote' }, `Filtro: ${NAMES[kf]}. ${list.length} ${list.length === 1 ? 'estudiante' : 'estudiantes'}.`,
@@ -159,6 +189,7 @@ function renderPending(today, byId) {
     ...st.map(x => {
       const s = byId[x.student_id], m = missesOf(x.student_id, today).length;
       return h('div', { className: 'prow' },
+        s ? avatar(s, 'mk sm') : '',
         h('div', { className: 'who' }, h('b', { textContent: s ? s.full_name : 'Estudiante' }),
           h('span', { textContent: `${fD(x.practice_date)} · hace ${dias(dayDiff(x.practice_date, today))} · entrada ${fT(x.entry_at)}` }),
           h('span', { textContent: s ? [s.practice_place, s.institution].filter(Boolean).join(', ') : '' }),
@@ -270,7 +301,6 @@ function studentRow(s) {
   const today = todayGT();
   const mine = logs.filter(x => x.student_id === s.id), inc = mine.filter(x => x.has_incident).length, n = mine.length;
   const m = missesOf(s.id, today), rei = m.length >= REINC_N, sNotes = notes.filter(x => x.student_id === s.id);
-  const ini = s.full_name.split(/\s+/).slice(0, 2).map(w => w[0]).join('').toUpperCase();
   const tl = mine.find(x => x.practice_date === today), stale = mine.find(x => isStale(x, today));
   const led = stale ? h('div', { className: 'led late', textContent: `Sin cerrar desde el ${fD(stale.practice_date)} (hace ${dias(dayDiff(stale.practice_date, today))})` })
     : tl?.status === 'submitted' ? h('div', { className: 'led done', textContent: `Jornada completada, salida ${fT(tl.exit_at)}` })
@@ -279,10 +309,13 @@ function studentRow(s) {
   const fact = (k, v) => h('div', {}, h('small', { textContent: k }), h('span', { textContent: v || '—' }));
   const tools = h('div', { className: 'tools' },
     rei ? h('div', { className: 'banner', textContent: `Reincidente: ${m.length} jornadas sin cerrar a tiempo en los últimos ${REINC_DIAS} días. Considere registrar una amonestación.` }) : '',
-    h('button', { type: 'button', className: 'sec', textContent: 'Registrar nota o amonestación', onclick: () => addNote(s) }));
-  return h('details', { className: 'stu', id: 'stu-' + s.id }, h('summary', {}, h('div', { className: 'mk', textContent: ini }),
-    h('div', { className: 'who' }, h('b', { textContent: s.full_name + (s.active ? '' : ' (inactivo)') }), led,
-      h('div', { className: 'facts' }, fact('Lugar de práctica', s.practice_place), fact('Empresa o institución', s.institution),
+    h('button', { type: 'button', className: 'sec', textContent: 'Registrar nota o amonestación', onclick: () => addNote(s) }),
+    s.program ? h('button', { type: 'button', className: 'sec', textContent: `Pasar a ${progName(s.program === 'prepractica' ? 'practica' : 'prepractica')}`, onclick: () => setProgram(s) })
+      : h('button', { type: 'button', className: 'sec', textContent: 'Asignar Práctica Supervisada', onclick: () => setProgramFirst(s, 'practica') }),
+    !s.program ? h('button', { type: 'button', className: 'sec', textContent: 'Asignar Prepráctica', onclick: () => setProgramFirst(s, 'prepractica') }) : '');
+  return h('details', { className: 'stu', id: 'stu-' + s.id }, h('summary', {}, avatar(s),
+    h('div', { className: 'who' }, h('b', { textContent: s.full_name + (s.active ? '' : ' (inactivo)') }), h('span', { className: 'pg ' + (s.program || 'none'), textContent: progName(s.program) }), led,
+      h('div', { className: 'facts' }, fact('Tipo de práctica', progName(s.program)), fact('Lugar de práctica', s.practice_place), fact('Empresa o institución', s.institution),
         fact('Supervisor', s.supervisor_name), fact('Contacto del supervisor', s.supervisor_contact),
         fact('Grado y sección', `${s.grade}, sección ${s.section}`))),
     h('div', { className: 'cnt' }, h('b', { textContent: n }), n === 1 ? ' bitácora' : ' bitácoras',
@@ -296,28 +329,32 @@ function studentRow(s) {
 }
 // ---- Visor de video a pantalla completa ----
 let vm;
-async function openVideo(x, btn) {
+const openVideo = (x, btn) => openMedia(x, btn, 'video');
+const openPhoto = (x, btn) => openMedia(x, btn, 'photo');
+async function openMedia(x, btn, kind) {
   if (vm) return;
+  const photo = kind === 'photo';
   btn.disabled = true;
-  const r = await sb.storage.from('practice-videos').createSignedUrl(x.video_path, 300);
+  const r = await sb.storage.from(photo ? 'practice-photos' : 'practice-videos').createSignedUrl(photo ? x.start_photo_path : x.video_path, 300);
   btn.disabled = false;
   if (r.error) return alert('No se pudo generar el enlace: ' + r.error.message);
   const url = r.data.signedUrl, prev = document.activeElement;
-  const v = h('video', { src: url, controls: true, autoplay: true, playsInline: true });
-  const close = () => { v.pause(); v.removeAttribute('src'); v.load();
+  const v = photo ? h('img', { src: url, alt: 'Foto de inicio de jornada' }) : h('video', { src: url, controls: true, autoplay: true, playsInline: true });
+  const close = () => { if (!photo) { v.pause(); v.removeAttribute('src'); v.load(); } else v.removeAttribute('src');
     if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
     document.removeEventListener('keydown', onKey); document.body.classList.remove('noscroll');
     vm.remove(); vm = null; prev?.focus?.(); };
   const onKey = e => { if (e.key === 'Escape') close(); };
   const x1 = h('button', { type: 'button', className: 'vclose', textContent: '✕ Cerrar', onclick: close });
-  vm = h('div', { className: 'vmodal', role: 'dialog', ariaModal: 'true', ariaLabel: 'Video de evidencia' },
-    h('div', { className: 'vbar' }, h('span', { textContent: fD(x.practice_date) }),
+  vm = h('div', { className: 'vmodal', role: 'dialog', ariaModal: 'true', ariaLabel: photo ? 'Foto de inicio' : 'Video de evidencia' },
+    h('div', { className: 'vbar' }, h('span', { textContent: (photo ? 'Foto de inicio · ' : '') + fD(x.practice_date) }),
       h('a', { href: url, target: '_blank', rel: 'noopener', textContent: 'Abrir o descargar' }), x1), v);
   document.body.append(vm); document.body.classList.add('noscroll'); document.addEventListener('keydown', onKey);
   x1.focus();
   if (vm.requestFullscreen) vm.requestFullscreen().catch(() => {});   // pantalla completa real si el navegador lo permite
   vm.addEventListener('fullscreenchange', () => { if (!document.fullscreenElement && vm) close(); });
 }
+const lp0 = (x, s) => x.program || s?.program || '';
 function logRow(x, s) {
   const today = todayGT(), stale = isStale(x, today), un = x.status === 'unclosed', late = x.closed_late === true;
   const body = h('dl', { className: 'body' });
@@ -330,6 +367,11 @@ function logRow(x, s) {
   row('Herramientas', x.tools_used);
   row('Supervisión', x.supervised == null ? '' : x.supervised ? 'Trabajó bajo supervisión del encargado' : 'Sin supervisión del encargado');
   if (x.has_incident) row('Incidente', `${x.incident_description} (${x.incident_reported ? 'Se informó' : 'No se informó'} al supervisor)`, 'bad');
+  const lp = x.program || s?.program;
+  if (lp) row('Tipo de práctica', progName(lp));
+  if (x.start_photo_path) body.append(h('dt', { textContent: 'Foto de inicio' }), h('dd', {},
+    h('button', { type: 'button', className: 'sec', textContent: 'Ver foto de inicio', onclick: ev => openPhoto(x, ev.currentTarget) })));
+  else if (x.status !== 'unclosed') row('Foto de inicio', 'Sin foto (jornada anterior a esta función)');
   if (x.video_path) body.append(h('dt', { textContent: 'Video' }), h('dd', {},
     h('button', { type: 'button', className: 'sec', textContent: 'Reproducir evidencia', onclick: ev => openVideo(x, ev.currentTarget) })));
   const ln = notes.filter(n => n.log_id === x.id);
@@ -348,7 +390,8 @@ function logRow(x, s) {
     h('div', { className: 'who' }, h('b', { textContent: title }), h('span', { textContent: sub })),
     h('div', { className: 'marks' }, stale ? h('em', { textContent: 'Sin cerrar' }) : '', un ? h('em', { textContent: 'No concluida' }) : '',
       late ? h('em', { className: 'warn', textContent: 'Cierre tardío' }) : '',
-      x.has_incident ? h('em', { textContent: 'Incidente' }) : '', x.video_path ? h('span', { textContent: 'Video' }) : ''),
+      x.has_incident ? h('em', { textContent: 'Incidente' }) : '', x.start_photo_path ? h('span', { textContent: 'Foto' }) : '', x.video_path ? h('span', { textContent: 'Video' }) : '',
+      lp0(x, s) ? h('span', { className: 'pg ' + lp0(x, s), textContent: progName(lp0(x, s)) }) : ''),
     h('span', { className: 'sign' })), body);
 }
 $('login').onsubmit = async e => { e.preventDefault();
@@ -356,5 +399,5 @@ $('login').onsubmit = async e => { e.preventDefault();
   if (error) return $('msg').textContent = 'Credenciales incorrectas.'; start(); };
 $('out').onclick = async () => { await sb.auth.signOut(); $('msg').textContent = ''; show(true, false); };
 $('re').onclick = load;
-$('q').oninput = $('g').onchange = render;
+$('q').oninput = $('g').onchange = $('pg').onchange = render;
 start();

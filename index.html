@@ -2,7 +2,7 @@
 <html lang="es"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Bitácora de práctica supervisada</title>
-<link rel="stylesheet" href="styles.css?v=7"></head><body><main>
+<link rel="stylesheet" href="styles.css?v=9"></head><body><main>
 <h1>Bitácora de práctica supervisada</h1>
 <div id="msg" class="err"></div>
 
@@ -20,13 +20,46 @@
 <label>Empresa/institución</label><input id="p-inst">
 <label>Nombre del supervisor</label><input id="p-sup">
 <label>Contacto del supervisor (opcional)</label><input id="p-supc">
+<label>Tipo de práctica</label>
+<div class="opts"><label><input type="radio" name="prog" value="practica" required> Práctica Supervisada</label><label><input type="radio" name="prog" value="prepractica"> Prepráctica</label></div>
+<p class="info">La Prepráctica se realiza un año antes de la Práctica Supervisada. Elija la que le corresponde ahora.</p>
+<label>Foto de perfil (opcional)</label>
+<div class="avrow"><div id="p-av-prev" class="av hidden"></div><input id="p-av" type="file" accept="image/*"></div>
+<p class="info">Se mostrará en el sistema junto a su nombre. Use una foto de su rostro, sin otras personas.</p>
 <button>Guardar perfil</button></form></section>
 
-<section id="s-home" class="card hidden"><div id="who" class="info"></div>
-<p id="today"></p><p id="rest-today" class="notice restnow hidden"></p><button id="b-start">INICIAR JORNADA</button></section>
+<section id="s-extra" class="card hidden"><p class="info">Falta un dato para continuar. Solo se pide una vez.</p>
+<form id="f-extra">
+<label>Tipo de práctica</label>
+<div class="opts"><label><input type="radio" name="prog2" value="practica" required> Práctica Supervisada</label><label><input type="radio" name="prog2" value="prepractica"> Prepráctica</label></div>
+<p class="info">La Prepráctica se realiza un año antes de la Práctica Supervisada. Elija la que le corresponde ahora.</p>
+<label>Foto de perfil (opcional)</label>
+<div class="avrow"><div id="x-av-prev" class="av hidden"></div><input id="x-av" type="file" accept="image/*"></div>
+<p class="info">Se mostrará en el sistema junto a su nombre. Use una foto de su rostro, sin otras personas.</p>
+<button>Guardar y continuar</button></form></section>
+
+<section id="s-home" class="card hidden"><div class="me"><div id="me-av" class="av"></div><div id="who" class="info"></div></div>
+<button type="button" id="b-avchg" class="sec small">Cambiar mi foto de perfil</button><input id="av-chg" type="file" accept="image/*" class="hidden">
+<p id="today"></p><p id="rest-today" class="notice restnow hidden"></p>
+<div id="start-box"><label>Foto de inicio de jornada (evidencia)</label>
+<p class="notice"><b>Importante:</b> no fotografíe información, documentos, pantallas o áreas que la empresa o institución no permita mostrar, ni a ninguna persona sin su consentimiento previo.</p>
+<input id="sp-file" type="file" accept="image/*" capture="environment">
+<img id="sp-prev" class="thumb hidden" alt="Foto de inicio de jornada"><div id="sp-info" class="info">Tome una foto en su lugar de práctica para poder iniciar la jornada.</div></div>
+<button id="b-start" disabled>INICIAR JORNADA</button></section>
 
 <section id="s-form" class="hidden">
-<div class="card"><div id="who2" class="info"></div><p class="ok" id="started"></p></div>
+<div class="card"><div class="me"><div id="me-av2" class="av"></div><div id="who2" class="info"></div></div><p class="ok" id="started"></p></div>
+<div class="card" id="ev-card"><h2 class="eh">Evidencias de la jornada</h2>
+<div id="ev-photo" class="info"></div>
+<label>Video de evidencia de aproximadamente 10 segundos</label>
+<p class="info">Puede grabarlo o subirlo <b>en cualquier momento de la jornada</b>: se guarda al instante. Al final solo cierra la jornada con el formulario.</p>
+<p class="notice"><b>Importante:</b> no grabe información, documentos, pantallas o áreas que la empresa o institución no permita mostrar, ni a ninguna persona sin su consentimiento previo. Esto protege a todos, incluido usted.</p>
+<button type="button" id="b-rec" class="sec">Grabar video (10 s)</button>
+<label class="info" style="font-weight:400">o elegir un archivo (máx. 10 MB):</label>
+<input id="v-file" type="file" accept="video/mp4,video/webm,video/quicktime">
+<div id="v-state" class="ok"></div>
+<video id="v-prev" class="hidden" controls playsinline></video><div id="v-info" class="info"></div>
+<button type="button" id="v-view" class="sec small hidden">Ver video guardado</button></div>
 <form id="f-log" class="card">
 <div id="late-box" class="hidden"><p class="notice bad"><b>Esta jornada es del <span id="late-date"></span> y no se cerró ese día.</b> Complete la bitácora con lo que recuerde y explique el motivo. Quedará registrada como cierre tardío y la verá el supervisor.</p>
 <label>¿Por qué no cerró la jornada ese día?</label><textarea id="a-late" maxlength="1000" placeholder="Explique brevemente el motivo (mínimo 10 caracteres)"></textarea></div>
@@ -40,20 +73,17 @@
 <div class="opts"><label><input type="radio" name="inc" value="0" checked> No</label><label><input type="radio" name="inc" value="1"> Sí</label></div>
 <div id="inc-box" class="hidden"><label>Describa detalladamente lo ocurrido</label><textarea id="i-desc" maxlength="4000"></textarea>
 <label>¿Se informó al supervisor?</label><div class="opts"><label><input type="radio" name="rep" value="1"> Sí</label><label><input type="radio" name="rep" value="0"> No</label></div></div>
-<label>Video de evidencia de aproximadamente 10 segundos</label>
-<p class="notice"><b>Importante:</b> no grabe información, documentos, pantallas o áreas que la empresa o institución no permita mostrar, ni a ninguna persona sin su consentimiento previo. Esto protege a todos, incluido usted.</p>
-<button type="button" id="b-rec" class="sec">Grabar video (10 s)</button>
-<label class="info" style="font-weight:400">o elegir un archivo (máx. 10 MB):</label>
-<input id="v-file" type="file" accept="video/mp4,video/webm,video/quicktime">
-<video id="v-prev" class="hidden" controls playsinline></video><div id="v-info" class="info"></div>
+<p id="v-need" class="notice bad hidden">Falta el video de evidencia. Grábelo o súbalo en «Evidencias de la jornada» (arriba) antes de cerrar.</p>
 <button id="b-send">FINALIZAR Y ENVIAR BITÁCORA</button></form></section>
 
-<section id="s-done" class="card hidden"><p class="ok">Bitácora registrada correctamente.</p><dl id="receipt"></dl></section>
+<section id="s-done" class="card hidden"><div class="me"><div id="me-av3" class="av"></div><p class="ok">Bitácora registrada correctamente.</p></div><dl id="receipt"></dl></section>
 <section id="warns" class="hidden"></section>
 <section id="rests" class="hidden"></section>
 <section id="hist" class="hidden"><h2>Mi historial de bitácoras</h2><div id="hist-list"></div></section>
 <button id="b-out" class="sec hidden">Cerrar sesión</button>
 </main>
+<div id="img-modal" class="modal hidden"><div class="mbox imgbox"><img id="img-big" alt="">
+<button type="button" id="img-close" class="sec">Cerrar</button></div></div>
 <div id="rec-modal" class="modal hidden"><div class="mbox">
 <p class="notice"><b>Antes de grabar:</b> no enfoque nada sensible que la empresa no permita ni a personas que no hayan dado su consentimiento previo.</p>
 <video id="rec-live" muted playsinline autoplay></video>
@@ -68,4 +98,4 @@
 <button type="button" id="rec-cancel" class="sec">Cancelar</button>
 </div></div></div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="supabase-config.js?v=7"></script><script src="app.js?v=7"></script></body></html>
+<script src="supabase-config.js?v=8"></script><script src="app.js?v=9"></script></body></html>
