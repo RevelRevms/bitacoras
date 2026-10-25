@@ -101,7 +101,7 @@ summary{list-style:none;cursor:pointer;display:flex;gap:14px;align-items:center;
 .rpast{margin-top:8px}.rpast>summary{cursor:pointer;color:var(--mut);font-size:.88rem}
 
 /* avatares, tipo de práctica y visor de foto */
-.mk.pic{background:center/cover no-repeat;color:transparent;border-radius:4px}.mk.sm{width:34px;height:34px;font-size:.85rem}
+.mk.pic{background:center/cover no-repeat;color:transparent;border-radius:50%}.mk.sm{width:34px;height:34px;font-size:.85rem}
 .pg{display:inline-block;font-size:.72rem;font-weight:600;padding:1px 7px;border-radius:3px;border:1px solid var(--board2);color:var(--board);margin:2px 6px 2px 0;align-self:flex-start}
 .pg.prepractica{background:#fff3d6;border-color:#c9972b;color:#6b4c0a}.pg.none{border-style:dashed;color:#777}
 .vmodal img{flex:1;min-height:0;width:100%;height:100%;object-fit:contain;background:#000;display:block}

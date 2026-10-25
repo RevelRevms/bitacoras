@@ -290,12 +290,56 @@ $('av-chg').onchange = async e => { const f = e.target.files[0]; e.target.value 
 
 let startPhoto = null;   // Blob JPEG ya reducido
 const updateStart = () => { $('b-start').disabled = !startPhoto; };
+function setStartPhoto(blob) {
+  startPhoto = blob; msg(''); const p = $('sp-prev'); p.src = URL.createObjectURL(blob); p.classList.remove('hidden');
+  $('sp-info').textContent = `Foto lista (${Math.round(blob.size / 1024)} KB). Puede cambiarla si quiere.`; updateStart(); }
 $('sp-file').onchange = async e => { const f = e.target.files[0]; startPhoto = null; $('sp-prev').classList.add('hidden'); updateStart();
   if (!f) return;
-  try { startPhoto = await shrink(f, 1280, false, .8); }
-  catch (err) { e.target.value = ''; return msg(err.message); }
-  msg(''); const p = $('sp-prev'); p.src = URL.createObjectURL(startPhoto); p.classList.remove('hidden');
-  $('sp-info').textContent = `Foto lista (${Math.round(startPhoto.size / 1024)} KB). Puede cambiarla si quiere.`; updateStart(); };
+  try { setStartPhoto(await shrink(f, 1280, false, .8)); }
+  catch (err) { e.target.value = ''; return msg(err.message); } };
+
+// ---- Cámara de la app para la foto de inicio (igual que la del video, sin micrófono) ----
+let pst, pFacing = 'environment', picId = '';
+try { picId = localStorage.getItem('picId') || ''; } catch {}
+const savePicId = v => { picId = v; try { v ? localStorage.setItem('picId', v) : localStorage.removeItem('picId'); } catch {} };
+const closePic = () => { pst?.getTracks().forEach(t => t.stop()); pst = null; $('pic-live').srcObject = null; $('pic-modal').classList.add('hidden'); };
+const getPic = () => navigator.mediaDevices.getUserMedia({ audio: false,
+  video: { ...(picId ? { deviceId: { exact: picId } } : { facingMode: pFacing }), width: { ideal: 1280 }, height: { ideal: 720 } } });
+async function openPic() {
+  pst?.getTracks().forEach(t => t.stop()); $('pic-shot').disabled = true;
+  try { pst = await getPic(); }
+  catch (e) { if (!picId) throw e; savePicId(''); pst = await getPic(); }   // la cámara guardada ya no existe: usa la predeterminada
+  const vt = pst.getVideoTracks()[0];
+  if (!vt || vt.readyState !== 'live') throw new Error('No se obtuvo la cámara.');
+  $('pic-live').srcObject = pst; $('pic-live').play().catch(() => {});
+  const st = () => $('pic-status').textContent = `Cámara: ${vt.label || 'sin nombre'}${vt.muted ? ' (SIN SEÑAL)' : ''}.`;
+  vt.onmute = vt.onunmute = st; st();
+  const fm = vt.getSettings().facingMode;   // espejo solo para la cámara frontal (la foto guardada no se voltea)
+  $('pic-live').classList.toggle('mirror', fm ? fm === 'user' : !/back|rear|trasera|environment/i.test(vt.label));
+  const devs = (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === 'videoinput'), sel = $('pic-cam');
+  sel.replaceChildren(...devs.map((d, i) => { const o = document.createElement('option'); o.value = d.deviceId; o.textContent = d.label || `Cámara ${i + 1}`; return o; }));
+  sel.value = vt.getSettings().deviceId || '';
+  $('pic-shot').disabled = false;
+}
+$('b-pic').onclick = async () => {
+  if (!navigator.mediaDevices?.getUserMedia) return msg('Este navegador no permite usar la cámara. Use el selector de imagen.');
+  msg(''); $('pic-modal').classList.remove('hidden');
+  try { await openPic(); } catch (err) { closePic();
+    msg('No se pudo usar la cámara: ' + err.message + ' Permita el acceso o use el selector de imagen.'); }
+};
+const rePic = async () => { try { await openPic(); } catch (err) { $('pic-status').textContent = 'No se pudo cambiar de cámara: ' + err.message; } };
+$('pic-flip').onclick = () => { pFacing = pFacing === 'user' ? 'environment' : 'user'; savePicId(''); rePic(); };
+$('pic-cam').onchange = e => { savePicId(e.target.value); rePic(); };
+$('pic-cancel').onclick = closePic;
+$('pic-shot').onclick = async () => {
+  const v = $('pic-live'); if (!v.videoWidth || !v.videoHeight) return $('pic-status').textContent = 'La cámara aún no está lista. Espere un momento.';
+  $('pic-shot').disabled = true;
+  const k = Math.min(1, 1280 / Math.max(v.videoWidth, v.videoHeight)), c = document.createElement('canvas');
+  c.width = Math.round(v.videoWidth * k); c.height = Math.round(v.videoHeight * k);
+  c.getContext('2d').drawImage(v, 0, 0, c.width, c.height);
+  const blob = await new Promise(r => c.toBlob(r, 'image/jpeg', .8));
+  if (!blob) { $('pic-shot').disabled = false; return $('pic-status').textContent = 'No se pudo tomar la foto. Intente de nuevo.'; }
+  closePic(); $('sp-file').value = ''; setStartPhoto(blob); };
 $('b-start').onclick = async () => {
   if (!startPhoto) return msg('Tome la foto de inicio antes de iniciar la jornada.');
   const btn = $('b-start'); btn.disabled = true; btn.textContent = 'Subiendo foto…'; msg('');

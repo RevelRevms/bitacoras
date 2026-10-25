@@ -2,7 +2,7 @@
 <html lang="es"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Bitácora de práctica supervisada</title>
-<link rel="stylesheet" href="styles.css?v=10"></head><body><main>
+<link rel="stylesheet" href="styles.css?v=11"></head><body><main>
 <h1>Bitácora de práctica supervisada</h1>
 <div id="msg" class="err"></div>
 
@@ -44,6 +44,8 @@
 <p id="inactive-note" class="notice bad hidden"><b>Su cuenta está inactiva.</b> No puede iniciar nuevas jornadas. Puede consultar su historial. Si cree que es un error, hable con su administrador.</p>
 <div id="start-box"><label>Foto de inicio de jornada (evidencia)</label>
 <p class="notice"><b>Importante:</b> no fotografíe información, documentos, pantallas o áreas que la empresa o institución no permita mostrar, ni a ninguna persona sin su consentimiento previo.</p>
+<button type="button" id="b-pic" class="sec">Tomar foto</button>
+<label class="info" style="font-weight:400">o elegir una imagen:</label>
 <input id="sp-file" type="file" accept="image/*" capture="environment">
 <img id="sp-prev" class="thumb hidden" alt="Foto de inicio de jornada"><div id="sp-info" class="info">Tome una foto en su lugar de práctica para poder iniciar la jornada.</div></div>
 <button id="b-start" disabled>INICIAR JORNADA</button></section>
@@ -98,5 +100,15 @@
 <button type="button" id="rec-flip" class="sec">Cambiar cámara</button>
 <button type="button" id="rec-cancel" class="sec">Cancelar</button>
 </div></div></div>
+<div id="pic-modal" class="modal hidden"><div class="mbox">
+<p class="notice"><b>Antes de tomar la foto:</b> no fotografíe información, documentos, pantallas o áreas que la empresa o institución no permita, ni a personas sin su consentimiento previo.</p>
+<video id="pic-live" muted playsinline autoplay></video>
+<div id="pic-status" class="info"></div>
+<details class="devs"><summary>Elegir cámara</summary><select id="pic-cam"></select></details>
+<div class="macts">
+<button type="button" id="pic-shot" disabled>Tomar foto</button>
+<button type="button" id="pic-flip" class="sec">Cambiar cámara</button>
+<button type="button" id="pic-cancel" class="sec">Cancelar</button>
+</div></div></div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="supabase-config.js?v=8"></script><script src="app.js?v=10"></script></body></html>
+<script src="supabase-config.js?v=8"></script><script src="app.js?v=11"></script></body></html>
