@@ -38,8 +38,10 @@ const pick = (r, ar, cols) => { const pool = ar ? POOLS.find(p => ar >= p[0] && 
 async function start() {
   const { data: { session } } = await sb.auth.getSession();
   if (!session) return gate();
-  const r = await sb.from('user_roles').select('role').eq('user_id', session.user.id).maybeSingle();
-  if (r.data?.role !== 'admin') return gate('Esta cuenta no tiene permisos de administrador.');
+  let r = await sb.from('user_roles').select('role,active').eq('user_id', session.user.id).maybeSingle(), legacy = false;
+  if (r.error) { legacy = true; r = await sb.from('user_roles').select('role').eq('user_id', session.user.id).maybeSingle(); }   // base sin migracion_v4
+  if (!['admin', 'supervisor'].includes(r.data?.role) || (legacy && r.data.role !== 'admin')) return gate('Esta cuenta no tiene permisos de administrador ni de supervisor.');
+  if (r.data.active === false) return gate('Su cuenta de personal está inactiva. Hable con el administrador.');
   show(false, true); ready = true;
   const s = await sb.from('students').select('id,full_name,grade,practice_place,institution,program,avatar_path');
   if (s.error) return expired(s.error) ? gate('Su sesión venció. Entre de nuevo.') : $('msg2').textContent = s.error.message;

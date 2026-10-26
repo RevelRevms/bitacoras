@@ -108,3 +108,7 @@ summary{list-style:none;cursor:pointer;display:flex;gap:14px;align-items:center;
 .prow{align-items:flex-start}
 
 .stu.off>summary{opacity:.62}.pg.off{background:#f6e0e0;border-color:#b00020;color:#7a0016}
+
+.ritem.off{opacity:.6}#staff-body h3{font-size:.95rem;margin:14px 0 4px}.rform label button{margin-top:6px}
+
+#staff-body h4{font-size:.88rem;margin:12px 0 2px;color:var(--board)}

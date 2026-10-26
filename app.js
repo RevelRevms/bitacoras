@@ -2,7 +2,7 @@ const sb = supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY,
   { auth: { persistSession: true, autoRefreshToken: true } });
 const $ = id => document.getElementById(id);
 const TZ = 'America/Guatemala', MAX = 10 * 1024 * 1024;
-const SCREENS = ['s-login','s-profile','s-extra','s-home','s-form','s-done'];
+const SCREENS = ['s-login','s-profile','s-extra','s-home','s-form','s-done','s-staff'];
 let user, student, log, myLogs = [], myNotes = [], myRests = [], video = null; // video = {blob, type, name} (solo para la vista previa local)
 
 const ERR = {
@@ -52,6 +52,8 @@ async function route() {
   $('b-out').classList.toggle('hidden', !session);
   if (!session) { user = null; return show('s-login'); }
   user = session.user;
+  const rr = await sb.from('user_roles').select('role').eq('user_id', user.id).maybeSingle();   // cuentas del personal no son estudiantes
+  if (!rr.error && ['admin', 'supervisor'].includes(rr.data?.role)) return show('s-staff');
   const r1 = await sb.from('students').select('*').eq('id', user.id).maybeSingle();
   if (r1.error) return fail(r1.error);
   student = r1.data;

@@ -4,7 +4,8 @@ const $ = id => document.getElementById(id), TZ = 'America/Guatemala';
 const REINC_N = 3, REINC_DIAS = 30;
 const PROG = { practica: 'Práctica Supervisada', prepractica: 'Prepráctica' };
 const progName = p => PROG[p] || 'Sin definir';
-let students = [], logs = [], notes = [], rests = [], kf = '', avs = {};   // kf = filtro activo de los indicadores superiores
+let students = [], logs = [], notes = [], rests = [], kf = '', avs = {};
+let me = null, staffMap = {}, audit = [], v4 = true, staffBuilt = false, staffUi = {}, lastCreated = null;   // v4 = ¿ya se ejecutó migracion_v4.sql?   // kf = filtro activo de los indicadores superiores
 const h = (t, p = {}, ...k) => { const e = document.createElement(t);
   for (const [a, v] of Object.entries(p)) a === 'onclick' ? e.onclick = v : e[a] = v;
   k.flat().forEach(x => e.append(x)); return e; };
@@ -18,6 +19,10 @@ const fT = d => d ? new Date(d).toLocaleTimeString('es-GT', { timeZone: TZ, hour
 const fDT = d => d ? new Date(d).toLocaleString('es-GT', { timeZone: TZ, hour12: false, day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—';
 const show = (login, app) => { $('login').classList.toggle('hidden', !login); $('app').classList.toggle('hidden', !app); };
 
+// ---- Quién hizo cada cosa ----
+const roleName = r => r === 'admin' ? 'Administrador' : r === 'supervisor' ? 'Supervisor' : 'Sin rol';
+const by = id => !id ? 'personal' : id === me?.id ? 'usted' : staffMap[id]?.full_name || 'personal anterior';
+
 // ---- Jornadas sin cerrar ----
 // sin cerrar = iniciada y no enviada, de un día anterior a hoy.
 const isStale = (x, today) => x.status === 'in_progress' && x.practice_date < today;
@@ -27,7 +32,17 @@ const missesOf = (id, today) => { const from = shiftDay(today, -REINC_DIAS);
   return logs.filter(x => x.student_id === id && x.practice_date >= from && isMiss(x, today)); };
 
 const ERRS = {
-  NO_AUTORIZADO: 'Esta cuenta no tiene permisos de administrador.',
+  NO_AUTORIZADO: 'Esta cuenta no tiene permiso para esta acción (o está inactiva).',
+  CORREO_YA_EXISTE: 'Ya existe una cuenta con ese correo.',
+  CORREO_INVALIDO: 'El correo no es válido.',
+  NOMBRE_INVALIDO: 'El nombre debe tener entre 3 y 150 caracteres.',
+  CONTRASENA_INVALIDA: 'La contraseña debe tener entre 8 y 72 caracteres.',
+  NO_PUEDE_MODIFICARSE_A_SI_MISMO: 'No puede cambiar su propio rol ni su estado.',
+  ES_ADMINISTRADOR: 'Un administrador no se modifica desde el panel.',
+  ES_ESTUDIANTE: 'Esa cuenta pertenece a un estudiante y no puede ser supervisor.',
+  NO_ES_PERSONAL: 'Esa cuenta no pertenece al personal.',
+  USUARIO_NO_ENCONTRADO: 'No existe una cuenta con ese correo. Créela primero (por ejemplo con «Crear supervisor nuevo»).',
+  YA_ES_SUPERVISOR: 'Esa cuenta ya es supervisor.',
   NO_ESTA_ABIERTA: 'Esa jornada ya no está abierta (quizá el estudiante la cerró). Se actualizará la lista.',
   AUN_ES_DEL_DIA: 'Solo se pueden cerrar jornadas de días anteriores.',
   MOTIVO_REQUERIDO: 'Escriba un motivo de al menos 5 caracteres.',
@@ -38,21 +53,30 @@ const errText = e => Object.entries(ERRS).find(([k]) => (e.message || '').includ
 async function start() {
   const { data: { session } } = await sb.auth.getSession();
   if (!session) return show(true, false);
-  const r = await sb.from('user_roles').select('role').eq('user_id', session.user.id).maybeSingle();
-  if (r.data?.role !== 'admin') { $('msg').textContent = 'Esta cuenta no tiene permisos de administrador.'; return show(true, false); }
+  let r = await sb.from('user_roles').select('role,active,full_name').eq('user_id', session.user.id).maybeSingle();
+  if (r.error) { v4 = false; r = await sb.from('user_roles').select('role').eq('user_id', session.user.id).maybeSingle(); }   // base sin migracion_v4
+  const role = r.data?.role;
+  if (role !== 'admin' && !(v4 && role === 'supervisor')) { $('msg').textContent = 'Esta cuenta no tiene permisos de administrador ni de supervisor.'; return show(true, false); }
+  if (r.data.active === false) { $('msg').textContent = 'Su cuenta de personal está inactiva. Hable con el administrador.'; return show(true, false); }
+  me = { id: session.user.id, role, name: r.data.full_name || '' };
+  $('me').textContent = v4 ? `Sesión: ${me.name || 'sin nombre'} · ${role === 'admin' ? 'Administrador' : 'Supervisor'}` : '';
   $('msg').textContent = ''; show(false, true); load();
 }
 async function load() {
-  const [s, l, n, rd] = await Promise.all([
+  const [s, l, n, rd, sd, au] = await Promise.all([
     sb.from('students').select('*').order('full_name'),
     sb.from('daily_logs').select('*').order('practice_date', { ascending: false }).limit(5000),
     sb.from('admin_notes').select('*').order('created_at', { ascending: false }).limit(2000),
-    sb.from('rest_days').select('*').order('rest_date', { ascending: false }).limit(3000)]);
+    sb.from('rest_days').select('*').order('rest_date', { ascending: false }).limit(3000),
+    v4 ? sb.rpc('staff_directory') : Promise.resolve({ data: [] }),
+    v4 && me?.role === 'admin' ? sb.from('staff_audit').select('*').order('at', { ascending: false }).limit(300) : Promise.resolve({ data: [] })]);
+  staffMap = Object.fromEntries((sd.error ? [] : sd.data || []).map(x => [x.user_id, x])); audit = au.error ? [] : au.data || [];
   if (s.error || l.error) return $('msg').textContent = (s.error || l.error).message;
   students = s.data; logs = l.data; notes = n.error ? [] : n.data;
   rests = rd.error ? [] : (rd.data || []);
   await loadAvatars();
-  $('msg').textContent = n.error || rd.error ? 'Algunas funciones no están disponibles (¿ya ejecutó migracion_v2.sql en Supabase?).' : '';
+  $('msg').textContent = n.error || rd.error ? 'Algunas funciones no están disponibles (¿ya ejecutó migracion_v2.sql en Supabase?).'
+    : v4 && sd.error ? 'No se pudo cargar el personal (¿ya ejecutó migracion_v4.sql en Supabase?).' : '';
   render();
 }
 
@@ -166,6 +190,7 @@ function render() {
 
   renderPending(today, byId);
   renderRest(today);
+  renderStaff();
 
   const days = [...Array(14)].map((_, i) => shiftDay(today, i - 13));
   const cnt = days.map(d => logs.filter(x => x.practice_date === d).length), mx = Math.max(1, ...cnt);
@@ -280,14 +305,14 @@ function renderRest(today) {
   restUi.list.replaceChildren(...students.filter(s => s.active).map(s => h('label', { className: 'chk' },
     h('input', { type: 'checkbox', value: s.id, checked: sel.has(s.id) }), ' ' + s.full_name)));
   const byId = Object.fromEntries(students.map(s => [s.id, s]));
-  const groups = new Map();
+  const groups = new Map();   // cada grupo recuerda quién lo registró
   rests.forEach(r => { const k = [r.rest_date, r.student_id ? 'i' : 'a', r.reason || ''].join('|');
-    if (!groups.has(k)) groups.set(k, { date: r.rest_date, all: !r.student_id, reason: r.reason, ids: [], names: [] });
+    if (!groups.has(k)) groups.set(k, { date: r.rest_date, all: !r.student_id, reason: r.reason, by: r.created_by, ids: [], names: [] });
     const g = groups.get(k); g.ids.push(r.id); if (r.student_id) g.names.push(byId[r.student_id]?.full_name || 'Estudiante'); });
   const gs = [...groups.values()], up = gs.filter(g => g.date >= today).sort((a, b) => a.date < b.date ? -1 : 1),
     past = gs.filter(g => g.date < today).sort((a, b) => a.date < b.date ? 1 : -1);
   const item = g => h('div', { className: 'ritem' }, h('div', { className: 'who' }, h('b', { textContent: fD(g.date) + (g.date === today ? ' (hoy)' : '') }),
-    h('span', { textContent: (g.all ? 'Todos los estudiantes' : g.names.length > 3 ? `${g.names.length} estudiantes: ${g.names.slice(0, 3).join(', ')}…` : g.names.join(', ')) + (g.reason ? ' · ' + g.reason : '') })),
+    h('span', { textContent: (g.all ? 'Todos los estudiantes' : g.names.length > 3 ? `${g.names.length} estudiantes: ${g.names.slice(0, 3).join(', ')}…` : g.names.join(', ')) + (g.reason ? ' · ' + g.reason : '') + (v4 && g.by ? ' · registró ' + by(g.by) : '') })),
     h('button', { type: 'button', className: 'sec', textContent: 'Quitar', onclick: () => delRest(g.ids) }));
   $('rest-sum').textContent = `Días de descanso${up.length ? ` (${up.length} próximos)` : ''}`;
   $('rest-list').replaceChildren(...(up.length ? up.map(item) : [h('p', { className: 'sub', textContent: 'No hay días de descanso próximos.' })]),
@@ -299,13 +324,97 @@ function renderRest(today) {
     : `Hoy hay descanso para ${tr.length} ${tr.length === 1 ? 'estudiante' : 'estudiantes'}: ${tr.slice(0, 4).map(r => byId[r.student_id]?.full_name || '?').join(', ')}${tr.length > 4 ? '…' : ''}.`;
 }
 
+// ---- Personal y actividad (solo administrador) ----
+const genPass = () => { const al = 'abcdefghjkmnpqrstuvwxyzABCDEFGHJKMNPQRSTUVWXYZ23456789', b = crypto.getRandomValues(new Uint32Array(12));
+  return [...b].map(n => al[n % al.length]).join(''); };
+async function staffCall(p, okMsg) {
+  const { error } = await sb.rpc('admin_set_staff', p);
+  if (error) { alert(errText(error)); return false; }
+  await load(); return true;
+}
+function staffRow(u) {
+  const self = u.user_id === me.id, adm = u.role === 'admin', former = u.role === 'student';
+  const acts = h('div', { className: 'acts' });
+  const b = (t, f, cls = 'sec') => acts.append(h('button', { type: 'button', className: cls, textContent: t, onclick: f }));
+  b('Cambiar nombre', async () => { const n = prompt('Nombre completo:', u.full_name); if (n !== null && n.trim() && n.trim() !== u.full_name) await staffCall({ p_user_id: u.user_id, p_full_name: n }); });
+  if (!self && !adm) {
+    if (former) b('Volver a asignar supervisor', () => confirm(`¿Asignar de nuevo el rol de supervisor a ${u.full_name}?`) && staffCall({ p_user_id: u.user_id, p_role: 'supervisor', p_active: true }), '');
+    else {
+      b(u.active ? 'Inactivar' : 'Activar', () => confirm(u.active ? `¿Inactivar a ${u.full_name}? Perderá el acceso al panel de inmediato; se conserva todo lo que registró.` : `¿Activar a ${u.full_name}?`) && staffCall({ p_user_id: u.user_id, p_active: !u.active }), u.active ? 'sec' : '');
+      b('Quitar rol de supervisor', () => confirm(`¿Quitar el rol de supervisor a ${u.full_name}? Lo que registró se conserva.`) && staffCall({ p_user_id: u.user_id, p_role: 'student' }));
+    } }
+  return h('div', { className: 'ritem' + (former || !u.active ? ' off' : '') }, h('div', { className: 'who' },
+    h('b', { textContent: u.full_name + (self ? ' (usted)' : '') }),
+    h('span', { textContent: `${former ? 'Antes supervisor (sin rol)' : roleName(u.role)}${!former && !u.active ? ' · INACTIVO' : ''} · ${u.email || ''}` }),
+    adm && !self ? h('span', { textContent: 'Los administradores se asignan con SQL; no se modifican desde el panel.' }) : ''), acts);
+}
+const FIELD = { active: 'activo', program: 'tipo de práctica', full_name: 'nombre', grade: 'grado', section: 'sección', practice_place: 'dirección', institution: 'empresa', supervisor_name: 'supervisor', supervisor_contact: 'contacto del supervisor', rol: 'rol', activo: 'activo', nombre: 'nombre' };
+const val2 = v => v === null || v === undefined ? '—' : v === true ? 'sí' : v === false ? 'no' : v === 'practica' ? 'Práctica Supervisada' : v === 'prepractica' ? 'Prepráctica' : v === 'student' ? 'sin rol' : v === 'supervisor' ? 'supervisor' : String(v);
+function describe(a) {
+  const stu = students.find(s => s.id === a.student_id), tgt = staffMap[a.target_user], d = a.detail || {};
+  const ch = Object.entries(d).filter(([, v]) => v && typeof v === 'object' && 'a' in v).map(([k, v]) => `${FIELD[k] || k}: ${val2(v.de)} → ${val2(v.a)}`).join('; ');
+  if (a.action === 'personal_creado') return `Creó la cuenta de supervisor ${d.nombre} (${d.correo})`;
+  if (a.action === 'personal_asignado') return `Asignó el rol de supervisor a ${d.nombre} (${d.correo})`;
+  if (a.action === 'personal_modificado') return `Modificó a ${tgt?.full_name || 'personal'}: ${ch}`;
+  if (a.action === 'estudiante_modificado') return `Modificó a ${stu?.full_name || 'un estudiante'}: ${ch}`;
+  if (a.action === 'descanso_quitado') return `Quitó el descanso del ${d.fecha}${stu ? ' de ' + stu.full_name : ' (general)'}${d.motivo ? ' · ' + d.motivo : ''}`;
+  return a.action;
+}
+function buildStaff() {
+  staffBuilt = true; const u = staffUi;
+  u.name = h('input', { type: 'text', required: true, minLength: 3, maxLength: 150, placeholder: 'Nombre completo' });
+  u.email = h('input', { type: 'email', required: true, placeholder: 'correo@inedsaac.com', autocomplete: 'off' });
+  u.pass = h('input', { type: 'text', required: true, minLength: 8, maxLength: 72, autocomplete: 'off', value: genPass() });
+  u.err = h('div', { className: 'err' }); u.res = h('div', { className: 'fnote hidden' }); u.list = h('div'); u.log = h('div');
+  const form = h('form', { className: 'rform', onsubmit: async e => { e.preventDefault(); u.err.textContent = '';
+      const btn = form.querySelector('button[type=submit]'); btn.disabled = true;
+      const p = { p_email: u.email.value.trim(), p_full_name: u.name.value.trim(), p_password: u.pass.value };
+      const { error } = await sb.rpc('admin_create_staff', p); btn.disabled = false;
+      if (error) return u.err.textContent = errText(error);
+      lastCreated = p; u.name.value = u.email.value = ''; u.pass.value = genPass(); await load(); } },
+    h('label', {}, 'Nombre completo', u.name), h('label', {}, 'Correo', u.email),
+    h('label', {}, 'Contraseña inicial (cópiela y entréguela; no se vuelve a mostrar)', u.pass,
+      h('button', { type: 'button', className: 'sec', textContent: 'Generar otra', onclick: () => u.pass.value = genPass() })),
+    u.err, h('button', { type: 'submit', textContent: 'Crear supervisor' }));
+  u.aName = h('input', { type: 'text', required: true, minLength: 3, maxLength: 150, placeholder: 'Nombre completo' });
+  u.aEmail = h('input', { type: 'email', required: true, placeholder: 'correo de la cuenta existente', autocomplete: 'off' });
+  u.aErr = h('div', { className: 'err' }); u.aOk = h('div', { className: 'ok' });
+  const form2 = h('form', { className: 'rform', onsubmit: async e => { e.preventDefault(); u.aErr.textContent = ''; u.aOk.textContent = '';
+      const btn = form2.querySelector('button[type=submit]'); btn.disabled = true;
+      const email = u.aEmail.value.trim();
+      const { error } = await sb.rpc('admin_assign_supervisor', { p_email: email, p_full_name: u.aName.value.trim() }); btn.disabled = false;
+      if (error) return u.aErr.textContent = errText(error);
+      u.aName.value = u.aEmail.value = ''; await load(); u.aOk.textContent = `Listo: ${email} ahora es supervisor.`; } },
+    h('label', {}, 'Nombre completo', u.aName), h('label', {}, 'Correo de la cuenta', u.aEmail),
+    u.aErr, h('button', { type: 'submit', textContent: 'Asignar rol de supervisor' }), u.aOk);
+  $('staff-body').replaceChildren(h('h3', { textContent: 'Agregar supervisor' }),
+    h('p', { className: 'sub', textContent: 'El supervisor puede hacer todo lo operativo del panel (bitácoras, notas, descansos, estudiantes) pero no gestiona al personal ni ve el registro de actividad.' }),
+    h('h4', { textContent: 'Crear supervisor nuevo (cuenta y rol)' }), form, u.res,
+    h('h4', { textContent: 'Asignar a una cuenta que ya existe (no puede ser de un estudiante)' }), form2,
+    h('h3', { textContent: 'Personal' }), u.list, h('h3', { textContent: 'Actividad reciente del personal' }), u.log);
+}
+function renderStaff() {
+  const card = $('staff'); card.classList.toggle('hidden', !(v4 && me?.role === 'admin'));
+  if (card.classList.contains('hidden')) return;
+  if (!staffBuilt) buildStaff();
+  const u = staffUi, all = Object.values(staffMap);
+  $('staff-sum').textContent = `Personal y actividad (${all.filter(x => x.role !== 'student' && x.active).length} activos)`;
+  u.res.classList.toggle('hidden', !lastCreated);
+  if (lastCreated) u.res.replaceChildren(h('span', { textContent: `Cuenta creada. Entregue: correo ${lastCreated.p_email} · contraseña ${lastCreated.p_password}` }),
+    h('button', { type: 'button', className: 'sec', textContent: 'Copiar', onclick: () => navigator.clipboard?.writeText(`Correo: ${lastCreated.p_email}\nContraseña: ${lastCreated.p_password}`) }),
+    h('button', { type: 'button', className: 'sec', textContent: 'Ocultar', onclick: () => { lastCreated = null; renderStaff(); } }));
+  u.list.replaceChildren(...all.map(staffRow));
+  u.log.replaceChildren(...(audit.length ? audit.slice(0, 100).map(x => h('div', { className: 'ritem' }, h('div', { className: 'who' },
+      h('b', { textContent: describe(x) }), h('span', { textContent: `${fDT(x.at)} · por ${by(x.actor)}` })))) : [h('p', { className: 'sub', textContent: 'Aún no hay actividad registrada.' })]));
+}
+
 const mins = x => x.exit_at ? Math.max(0, Math.round((new Date(x.exit_at) - new Date(x.entry_at)) / 60000)) : 0;
 const dur = m => m ? `${Math.floor(m / 60)} h ${m % 60} min` : 'en curso';
 function noteRow(n) {
   const lg = n.log_id ? logs.find(x => x.id === n.log_id) : null;
   return h('div', { className: 'note ' + n.kind },
     h('b', { textContent: n.kind === 'amonestacion' ? 'Amonestación' : 'Observación' }),
-    h('span', { className: 'd', textContent: fDT(n.created_at) + (lg ? ` · sobre la jornada del ${fD(lg.practice_date)}` : '') + (n.kind === 'amonestacion' ? ' · la ve el estudiante' : ' · privada') }),
+    h('span', { className: 'd', textContent: fDT(n.created_at) + (v4 ? ` · por ${by(n.created_by)}` : '') + (lg ? ` · sobre la jornada del ${fD(lg.practice_date)}` : '') + (n.kind === 'amonestacion' ? ' · la ve el estudiante' : ' · privada') }),
     h('p', { textContent: n.note }));
 }
 function studentRow(s) {
@@ -372,7 +481,7 @@ function logRow(x, s) {
   const body = h('dl', { className: 'body' });
   const row = (k, v, c = '') => { if (!v) return; const d = h('dd', { textContent: v }); body.append(h('dt', { className: c, textContent: k }), d); };
   if (stale) row('Estado', `El estudiante inició la jornada y no la cerró. No hay hora de salida (hace ${dias(dayDiff(x.practice_date, today))}).`, 'bad');
-  if (un) { row('Estado', 'Cerrada por el administrador como no concluida', 'bad'); row('Motivo del cierre', x.admin_note, 'bad'); row('Cerrada el', fDT(x.resolved_at)); }
+  if (un) { row('Estado', 'Cerrada por el administrador como no concluida', 'bad'); row('Motivo del cierre', x.admin_note, 'bad'); row('Cerrada el', fDT(x.resolved_at) + (v4 && x.resolved_by ? ` · por ${by(x.resolved_by)}` : '')); }
   if (late) { row('Cierre tardío', `Enviada el ${fDT(x.exit_at)}, ${dias(dayDiff(x.practice_date, dateGT(x.exit_at)))} después de la jornada. La hora de salida no corresponde al fin real de la práctica.`, 'bad');
     row('Motivo del retraso', x.late_reason); }
   row('Actividades', x.activities); row('Actividad principal', x.main_activity); row('Aprendizaje', x.learning);
@@ -409,7 +518,7 @@ function logRow(x, s) {
 $('login').onsubmit = async e => { e.preventDefault();
   const { error } = await sb.auth.signInWithPassword({ email: $('em').value, password: $('pw').value });
   if (error) return $('msg').textContent = 'Credenciales incorrectas.'; start(); };
-$('out').onclick = async () => { await sb.auth.signOut(); $('msg').textContent = ''; show(true, false); };
+$('out').onclick = async () => { await sb.auth.signOut(); $('msg').textContent = ''; me = null; staffMap = {}; audit = []; lastCreated = null; staffBuilt = false; show(true, false); };
 $('re').onclick = load;
 $('q').oninput = $('g').onchange = $('pg').onchange = $('ac').onchange = render;
 start();
