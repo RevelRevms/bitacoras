@@ -417,7 +417,7 @@ function renderStaff() {
 // La frase secreta solo se usa en la llamada: no se guarda ni en el navegador ni en la base de datos.
 let nsBuilt = false, nsUi = {}, nsRows = [];
 const csvCell = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
-function clearNewStu() { nsRows = []; if (nsUi.salt) nsUi.salt.value = ''; if (nsUi.list) nsUi.list.value = ''; if (nsUi.res) nsUi.res.replaceChildren(); if (nsUi.err) nsUi.err.textContent = ''; }
+function clearNewStu() { nsRows = []; if (nsUi.salt) nsUi.salt.value = ''; if (nsUi.list) { nsUi.list.value = ''; nsUi.grow?.(); } if (nsUi.res) nsUi.res.replaceChildren(); if (nsUi.err) nsUi.err.textContent = ''; }
 const nsErr = e => /Could not find the function|PGRST202/.test(e.message || '') ? 'Falta ejecutar migracion_v5.sql en Supabase.' : errText(e);
 function nsShow(rows, withPass) {
   nsRows = rows; const u = nsUi;
@@ -432,12 +432,14 @@ function nsShow(rows, withPass) {
       const csv = '\uFEFF' + [['nombre', 'correo', 'contraseña', 'estado']].concat(rows.map(r => [r.nombre, r.correo, r.contrasena, r.estado])).map(r => r.map(csvCell).join(',')).join('\r\n');
       const link = h('a', { href: URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' })), download: 'usuarios-creados.csv' }); document.body.append(link); link.click(); link.remove(); } }),
     h('button', { type: 'button', className: 'sec', textContent: 'Ocultar contraseñas', onclick: () => { nsRows = []; u.res.replaceChildren(); } })) : '';
-  u.res.replaceChildren(h('p', { className: withPass ? 'ok' : 'sub', textContent: withPass ? `Listo: ${made} ${made === 1 ? 'cuenta creada' : 'cuentas creadas'}${rows.length - made ? `, ${rows.length - made} omitidas` : ''}. Entregue estas contraseñas: no se vuelven a mostrar (pero se pueden recalcular con la misma frase).`
+  u.res.replaceChildren(h('p', { className: withPass ? 'ok' : 'sub', textContent: withPass ? `Listo: ${made} ${made === 1 ? 'cuenta creada' : 'cuentas creadas'}${rows.length - made ? `, ${rows.length - made} omitidas` : ''}. Guarde las contraseñas ahora: no se vuelven a mostrar.`
       : `Vista previa: ${rows.filter(r => r.estado === 'se creará').length} se crearían. No se creó nada.` }), tools, h('div', { className: 'tbl' }, tbl));
 }
 function buildNewStu() {
   nsBuilt = true; const u = nsUi;
-  u.list = h('textarea', { rows: 8, placeholder: 'Una línea por estudiante, en este orden:\nApellido1 Apellido2 Nombre1 Nombre2\nEj.: Bethancourt Torres Oscar René', spellcheck: false });
+  u.list = h('textarea', { rows: 10, placeholder: 'Pegue aquí los nombres, uno por línea\nEj.: Bethancourt Torres Oscar René', spellcheck: false });
+  const grow = () => { u.list.style.height = 'auto'; u.list.style.height = Math.min(u.list.scrollHeight + 2, Math.round(innerHeight * .7)) + 'px'; };   // crece con las líneas
+  u.list.addEventListener('input', grow); u.grow = grow;
   u.salt = h('input', { type: 'password', autocomplete: 'off', maxLength: 200, placeholder: 'La misma frase que usó en el script' });
   u.err = h('div', { className: 'err' }); u.res = h('div');
   const lines = () => u.list.value.split(/\r?\n/).map(x => x.trim()).filter(Boolean);
@@ -453,11 +455,13 @@ function buildNewStu() {
       const { data, error } = await sb.rpc('admin_create_students', { p_list: l.slice(i, i + 25).join('\n'), p_salt: u.salt.value, p_dry_run: false });
       if (error) { u.err.textContent = `${nsErr(error)}${out.length ? ` Ya se habían creado ${out.filter(r => r.estado === 'creado').length}; vea abajo.` : ''}`; break; }
       out.push(...(data || [])); }
-    busy(false); if (out.length) { nsShow(out, true); if (!u.err.textContent) { u.list.value = ''; u.salt.value = ''; } await load(); } };
-  u.form = h('form', { className: 'rform', onsubmit: e => { e.preventDefault(); create(); } },
-    h('label', {}, 'Lista de estudiantes', u.list), h('label', {}, 'Frase secreta (no se guarda)', u.salt), u.err,
-    h('div', { className: 'acts' }, h('button', { type: 'button', className: 'sec', textContent: 'Vista previa', onclick: preview }), h('button', { type: 'submit', textContent: 'Crear cuentas' })));
-  $('newstu-body').replaceChildren(h('p', { className: 'sub', textContent: 'Cada línea: Apellido1 Apellido2 Nombre1 [Nombre2…] (los apellidos «Del Rosario», «De León»… se reconocen). Correo: nombre.apellido@inedsaac.com (si ya existe, agrega 2, 3…). Contraseña: Nombre + 4 dígitos según la frase secreta + «!», igual que el script: con la misma frase salen las mismas contraseñas. Quien ya existe se omite. Cada estudiante llena su perfil al primer ingreso.' }), u.form, u.res);
+    busy(false); if (out.length) { nsShow(out, true); if (!u.err.textContent) { u.list.value = ''; u.grow(); u.salt.value = ''; } await load(); } };
+  u.form = h('form', { className: 'nsform', onsubmit: e => { e.preventDefault(); create(); } },
+    h('label', {}, 'Lista de estudiantes', h('span', { className: 'hint', textContent: ' · Apellido1 Apellido2 Nombre1 Nombre2' }), u.list),
+    h('div', { className: 'nsrow' }, h('label', {}, 'Frase secreta (no se guarda)', u.salt),
+      h('div', { className: 'acts' }, h('button', { type: 'button', className: 'sec', textContent: 'Vista previa', onclick: preview }), h('button', { type: 'submit', textContent: 'Crear cuentas' }))),
+    u.err);
+  $('newstu-body').replaceChildren(u.form, u.res);
 }
 function renderNewStu() {
   const card = $('newstu'); card.classList.toggle('hidden', !(v4 && me?.role === 'admin'));
