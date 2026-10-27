@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Panel administrativo - Bitácora</title><link rel="stylesheet" href="admin.css?v=12"></head><body><main>
+<title>Panel administrativo - Bitácora</title><link rel="stylesheet" href="admin.css?v=13"></head><body><main>
 <h1>Bitácora de práctica supervisada<small>Panel de supervisión</small></h1><div id="me" class="sub"></div><div id="msg" class="err"></div>
 <form id="login" class="card hidden"><input id="em" type="email" placeholder="Correo" required>
 <input id="pw" type="password" placeholder="Contraseña" required><button>Entrar</button></form>
@@ -12,10 +12,11 @@
 <p class="sub">Marque los días laborables en que no hay práctica. Ese día el estudiante no puede iniciar jornada y verá el aviso en su pantalla.</p>
 <div id="rest-form"></div><div id="rest-list"></div></details>
 <details id="staff" class="card restcard hidden"><summary><h2 id="staff-sum">Personal y actividad</h2></summary><div id="staff-body"></div></details>
+<details id="newstu" class="card restcard hidden"><summary><h2>Crear cuentas de estudiantes</h2></summary><div id="newstu-body"></div></details>
 <div class="charts"><div class="card"><h2>Bitácoras por día (últimos 14 días)</h2><div id="c-days"></div></div>
 <div class="card"><h2>Bitácoras por grado</h2><div id="c-grade"></div></div></div>
 <div class="bar"><input id="q" placeholder="Buscar estudiante o empresa…"><select id="g"><option value="">Todos los grados</option></select><select id="pg" title="Tipo de práctica"><option value="">Todos los tipos</option><option value="practica">Práctica Supervisada</option><option value="prepractica">Prepráctica</option><option value="none">Sin definir</option></select><select id="ac" title="Estado"><option value="">Activos e inactivos</option><option value="on">Solo activos</option><option value="off">Solo inactivos</option></select>
 <button id="re" class="sec">Actualizar</button><a class="sec" href="mosaico.html" style="padding:8px 12px;text-decoration:none">Mosaico de videos</a><button id="out" class="sec">Salir</button></div>
 <div id="list"></div></div></main>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="supabase-config.js?v=8"></script><script src="admin.js?v=11"></script></body></html>
+<script src="supabase-config.js?v=8"></script><script src="admin.js?v=12"></script></body></html>

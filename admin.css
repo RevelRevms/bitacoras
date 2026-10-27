@@ -112,3 +112,8 @@ summary{list-style:none;cursor:pointer;display:flex;gap:14px;align-items:center;
 .ritem.off{opacity:.6}#staff-body h3{font-size:.95rem;margin:14px 0 4px}.rform label button{margin-top:6px}
 
 #staff-body h4{font-size:.88rem;margin:12px 0 2px;color:var(--board)}
+
+/* crear cuentas de estudiantes */
+#newstu-body textarea{min-height:140px;font-family:inherit}.tbl{overflow-x:auto;margin-top:8px}
+table.ns{border-collapse:collapse;width:100%;font-size:.86rem}table.ns th,table.ns td{text-align:left;padding:5px 8px;border-bottom:1px solid var(--rule);white-space:nowrap}
+table.ns td.pw{font-family:ui-monospace,Consolas,monospace;font-weight:600}table.ns tr.skip{opacity:.6}

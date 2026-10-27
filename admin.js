@@ -41,6 +41,9 @@ const ERRS = {
   ES_ADMINISTRADOR: 'Un administrador no se modifica desde el panel.',
   ES_ESTUDIANTE: 'Esa cuenta pertenece a un estudiante y no puede ser supervisor.',
   NO_ES_PERSONAL: 'Esa cuenta no pertenece al personal.',
+  FRASE_INVALIDA: 'La frase secreta debe tener entre 8 y 200 caracteres.',
+  LISTA_VACIA: 'Escriba al menos un nombre.',
+  LISTA_DEMASIADO_LARGA: 'La lista es demasiado larga para una sola vista previa (máximo 200).',
   USUARIO_NO_ENCONTRADO: 'No existe una cuenta con ese correo. Créela primero (por ejemplo con «Crear supervisor nuevo»).',
   YA_ES_SUPERVISOR: 'Esa cuenta ya es supervisor.',
   NO_ESTA_ABIERTA: 'Esa jornada ya no está abierta (quizá el estudiante la cerró). Se actualizará la lista.',
@@ -190,7 +193,7 @@ function render() {
 
   renderPending(today, byId);
   renderRest(today);
-  renderStaff();
+  renderStaff(); renderNewStu();
 
   const days = [...Array(14)].map((_, i) => shiftDay(today, i - 13));
   const cnt = days.map(d => logs.filter(x => x.practice_date === d).length), mx = Math.max(1, ...cnt);
@@ -354,6 +357,7 @@ function describe(a) {
   const stu = students.find(s => s.id === a.student_id), tgt = staffMap[a.target_user], d = a.detail || {};
   const ch = Object.entries(d).filter(([, v]) => v && typeof v === 'object' && 'a' in v).map(([k, v]) => `${FIELD[k] || k}: ${val2(v.de)} → ${val2(v.a)}`).join('; ');
   if (a.action === 'personal_creado') return `Creó la cuenta de supervisor ${d.nombre} (${d.correo})`;
+  if (a.action === 'estudiantes_creados') return `Creó ${d.creados} ${d.creados === 1 ? 'cuenta' : 'cuentas'} de estudiantes${d.omitidos ? ` (${d.omitidos} ya existían)` : ''}`;
   if (a.action === 'personal_asignado') return `Asignó el rol de supervisor a ${d.nombre} (${d.correo})`;
   if (a.action === 'personal_modificado') return `Modificó a ${tgt?.full_name || 'personal'}: ${ch}`;
   if (a.action === 'estudiante_modificado') return `Modificó a ${stu?.full_name || 'un estudiante'}: ${ch}`;
@@ -406,6 +410,59 @@ function renderStaff() {
   u.list.replaceChildren(...all.map(staffRow));
   u.log.replaceChildren(...(audit.length ? audit.slice(0, 100).map(x => h('div', { className: 'ritem' }, h('div', { className: 'who' },
       h('b', { textContent: describe(x) }), h('span', { textContent: `${fDT(x.at)} · por ${by(x.actor)}` })))) : [h('p', { className: 'sub', textContent: 'Aún no hay actividad registrada.' })]));
+}
+
+// ---- Crear cuentas de estudiantes desde una lista (solo administrador) ----
+// Misma regla que crear_usuarios.sql: correo nombre.apellido@inedsaac.com y contraseña Nombre + 4 dígitos (según la frase secreta) + «!».
+// La frase secreta solo se usa en la llamada: no se guarda ni en el navegador ni en la base de datos.
+let nsBuilt = false, nsUi = {}, nsRows = [];
+const csvCell = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
+function clearNewStu() { nsRows = []; if (nsUi.salt) nsUi.salt.value = ''; if (nsUi.list) nsUi.list.value = ''; if (nsUi.res) nsUi.res.replaceChildren(); if (nsUi.err) nsUi.err.textContent = ''; }
+const nsErr = e => /Could not find the function|PGRST202/.test(e.message || '') ? 'Falta ejecutar migracion_v5.sql en Supabase.' : errText(e);
+function nsShow(rows, withPass) {
+  nsRows = rows; const u = nsUi;
+  if (!rows.length) return u.res.replaceChildren();
+  const made = rows.filter(r => r.estado === 'creado').length;
+  const tbl = h('table', { className: 'ns' }, h('thead', {}, h('tr', {}, ['Nombre', 'Correo', withPass ? 'Contraseña' : '', 'Estado'].filter((_, i) => withPass || i !== 2).map(t => h('th', { textContent: t })))),
+    h('tbody', {}, rows.map(r => h('tr', { className: r.estado === 'creado' || r.estado === 'se creará' ? '' : 'skip' },
+      h('td', { textContent: r.nombre }), h('td', { textContent: r.correo || '—' }), withPass ? h('td', { className: 'pw', textContent: r.contrasena || '—' }) : '', h('td', { textContent: r.estado })))));
+  const tools = withPass && made ? h('div', { className: 'acts' },
+    h('button', { type: 'button', className: 'sec', textContent: 'Copiar tabla', onclick: () => navigator.clipboard?.writeText(['Nombre\tCorreo\tContraseña'].concat(rows.filter(r => r.estado === 'creado').map(r => [r.nombre, r.correo, r.contrasena].join('\t'))).join('\n')) }),
+    h('button', { type: 'button', className: 'sec', textContent: 'Descargar CSV', onclick: () => {
+      const csv = '\uFEFF' + [['nombre', 'correo', 'contraseña', 'estado']].concat(rows.map(r => [r.nombre, r.correo, r.contrasena, r.estado])).map(r => r.map(csvCell).join(',')).join('\r\n');
+      const link = h('a', { href: URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' })), download: 'usuarios-creados.csv' }); document.body.append(link); link.click(); link.remove(); } }),
+    h('button', { type: 'button', className: 'sec', textContent: 'Ocultar contraseñas', onclick: () => { nsRows = []; u.res.replaceChildren(); } })) : '';
+  u.res.replaceChildren(h('p', { className: withPass ? 'ok' : 'sub', textContent: withPass ? `Listo: ${made} ${made === 1 ? 'cuenta creada' : 'cuentas creadas'}${rows.length - made ? `, ${rows.length - made} omitidas` : ''}. Entregue estas contraseñas: no se vuelven a mostrar (pero se pueden recalcular con la misma frase).`
+      : `Vista previa: ${rows.filter(r => r.estado === 'se creará').length} se crearían. No se creó nada.` }), tools, h('div', { className: 'tbl' }, tbl));
+}
+function buildNewStu() {
+  nsBuilt = true; const u = nsUi;
+  u.list = h('textarea', { rows: 8, placeholder: 'Una línea por estudiante, en este orden:\nApellido1 Apellido2 Nombre1 Nombre2\nEj.: Bethancourt Torres Oscar René', spellcheck: false });
+  u.salt = h('input', { type: 'password', autocomplete: 'off', maxLength: 200, placeholder: 'La misma frase que usó en el script' });
+  u.err = h('div', { className: 'err' }); u.res = h('div');
+  const lines = () => u.list.value.split(/\r?\n/).map(x => x.trim()).filter(Boolean);
+  const busy = (on) => u.form.querySelectorAll('button').forEach(b => b.disabled = on);
+  const preview = async () => { u.err.textContent = ''; const l = lines(); if (!l.length) return u.err.textContent = 'Escriba al menos un nombre.';
+    busy(true); const { data, error } = await sb.rpc('admin_create_students', { p_list: l.join('\n'), p_salt: u.salt.value, p_dry_run: true }); busy(false);
+    if (error) return u.err.textContent = nsErr(error); nsShow(data || [], false); };
+  const create = async () => { u.err.textContent = ''; const l = lines(); if (!l.length) return u.err.textContent = 'Escriba al menos un nombre.';
+    if (u.salt.value.length < 8) return u.err.textContent = ERRS.FRASE_INVALIDA;
+    if (!confirm(`Se intentará crear ${l.length} ${l.length === 1 ? 'cuenta' : 'cuentas'} de estudiantes. Quien ya exista se omite. ¿Continuar?`)) return;
+    busy(true); const out = [];
+    for (let i = 0; i < l.length; i += 25) {   // tandas de 25: cada tanda es todo-o-nada
+      const { data, error } = await sb.rpc('admin_create_students', { p_list: l.slice(i, i + 25).join('\n'), p_salt: u.salt.value, p_dry_run: false });
+      if (error) { u.err.textContent = `${nsErr(error)}${out.length ? ` Ya se habían creado ${out.filter(r => r.estado === 'creado').length}; vea abajo.` : ''}`; break; }
+      out.push(...(data || [])); }
+    busy(false); if (out.length) { nsShow(out, true); if (!u.err.textContent) { u.list.value = ''; u.salt.value = ''; } await load(); } };
+  u.form = h('form', { className: 'rform', onsubmit: e => { e.preventDefault(); create(); } },
+    h('label', {}, 'Lista de estudiantes', u.list), h('label', {}, 'Frase secreta (no se guarda)', u.salt), u.err,
+    h('div', { className: 'acts' }, h('button', { type: 'button', className: 'sec', textContent: 'Vista previa', onclick: preview }), h('button', { type: 'submit', textContent: 'Crear cuentas' })));
+  $('newstu-body').replaceChildren(h('p', { className: 'sub', textContent: 'Cada línea: Apellido1 Apellido2 Nombre1 [Nombre2…] (los apellidos «Del Rosario», «De León»… se reconocen). Correo: nombre.apellido@inedsaac.com (si ya existe, agrega 2, 3…). Contraseña: Nombre + 4 dígitos según la frase secreta + «!», igual que el script: con la misma frase salen las mismas contraseñas. Quien ya existe se omite. Cada estudiante llena su perfil al primer ingreso.' }), u.form, u.res);
+}
+function renderNewStu() {
+  const card = $('newstu'); card.classList.toggle('hidden', !(v4 && me?.role === 'admin'));
+  if (card.classList.contains('hidden')) return;
+  if (!nsBuilt) buildNewStu();
 }
 
 const mins = x => x.exit_at ? Math.max(0, Math.round((new Date(x.exit_at) - new Date(x.entry_at)) / 60000)) : 0;
@@ -518,7 +575,7 @@ function logRow(x, s) {
 $('login').onsubmit = async e => { e.preventDefault();
   const { error } = await sb.auth.signInWithPassword({ email: $('em').value, password: $('pw').value });
   if (error) return $('msg').textContent = 'Credenciales incorrectas.'; start(); };
-$('out').onclick = async () => { await sb.auth.signOut(); $('msg').textContent = ''; me = null; staffMap = {}; audit = []; lastCreated = null; staffBuilt = false; show(true, false); };
+$('out').onclick = async () => { await sb.auth.signOut(); $('msg').textContent = ''; me = null; staffMap = {}; audit = []; lastCreated = null; staffBuilt = false; clearNewStu(); nsBuilt = false; show(true, false); };
 $('re').onclick = load;
 $('q').oninput = $('g').onchange = $('pg').onchange = $('ac').onchange = render;
 start();
