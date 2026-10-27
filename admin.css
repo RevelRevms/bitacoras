@@ -121,3 +121,6 @@ summary{list-style:none;cursor:pointer;display:flex;gap:14px;align-items:center;
 .tbl{overflow-x:auto;margin-top:8px}
 table.ns{border-collapse:collapse;width:100%;font-size:.86rem}table.ns th,table.ns td{text-align:left;padding:5px 8px;border-bottom:1px solid var(--rule);white-space:nowrap}
 table.ns td.pw{font-family:ui-monospace,Consolas,monospace;font-weight:600}table.ns tr.skip{opacity:.6}
+
+.chips{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0}.chip{padding:6px 12px;font-size:.85rem;border-radius:999px;background:#fff;color:var(--ink,#1c2b22);border:1px solid #c9d4cc}.chip.on{background:#1f5c3d;color:#fff;border-color:#1f5c3d}
+#accts-body input[type=search]{display:block;width:100%;box-sizing:border-box;margin:4px 0 8px;font-weight:400}

@@ -5,7 +5,7 @@ const REINC_N = 3, REINC_DIAS = 30;
 const PROG = { practica: 'Práctica Supervisada', prepractica: 'Prepráctica' };
 const progName = p => PROG[p] || 'Sin definir';
 let students = [], logs = [], notes = [], rests = [], kf = '', avs = {};
-let me = null, staffMap = {}, audit = [], v4 = true, staffBuilt = false, staffUi = {}, lastCreated = null;   // v4 = ¿ya se ejecutó migracion_v4.sql?   // kf = filtro activo de los indicadores superiores
+let me = null, staffMap = {}, audit = [], accts = [], acErr = '', v4 = true, staffBuilt = false, staffUi = {}, lastCreated = null;   // v4 = ¿ya se ejecutó migracion_v4.sql?   // kf = filtro activo de los indicadores superiores
 const h = (t, p = {}, ...k) => { const e = document.createElement(t);
   for (const [a, v] of Object.entries(p)) a === 'onclick' ? e.onclick = v : e[a] = v;
   k.flat().forEach(x => e.append(x)); return e; };
@@ -66,14 +66,16 @@ async function start() {
   $('msg').textContent = ''; show(false, true); load();
 }
 async function load() {
-  const [s, l, n, rd, sd, au] = await Promise.all([
+  const [s, l, n, rd, sd, au, ac] = await Promise.all([
     sb.from('students').select('*').order('full_name'),
     sb.from('daily_logs').select('*').order('practice_date', { ascending: false }).limit(5000),
     sb.from('admin_notes').select('*').order('created_at', { ascending: false }).limit(2000),
     sb.from('rest_days').select('*').order('rest_date', { ascending: false }).limit(3000),
     v4 ? sb.rpc('staff_directory') : Promise.resolve({ data: [] }),
-    v4 && me?.role === 'admin' ? sb.from('staff_audit').select('*').order('at', { ascending: false }).limit(300) : Promise.resolve({ data: [] })]);
+    v4 && me?.role === 'admin' ? sb.from('staff_audit').select('*').order('at', { ascending: false }).limit(300) : Promise.resolve({ data: [] }),
+    v4 && me?.role === 'admin' ? sb.rpc('admin_list_accounts') : Promise.resolve({ data: [] })]);
   staffMap = Object.fromEntries((sd.error ? [] : sd.data || []).map(x => [x.user_id, x])); audit = au.error ? [] : au.data || [];
+  accts = ac.error ? [] : ac.data || []; acErr = ac.error ? (/Could not find the function|PGRST202/.test(ac.error.message || '') ? 'Falta ejecutar migracion_v6.sql en Supabase.' : errText(ac.error)) : '';
   if (s.error || l.error) return $('msg').textContent = (s.error || l.error).message;
   students = s.data; logs = l.data; notes = n.error ? [] : n.data;
   rests = rd.error ? [] : (rd.data || []);
@@ -193,7 +195,7 @@ function render() {
 
   renderPending(today, byId);
   renderRest(today);
-  renderStaff(); renderNewStu();
+  renderStaff(); renderNewStu(); renderAccts();
 
   const days = [...Array(14)].map((_, i) => shiftDay(today, i - 13));
   const cnt = days.map(d => logs.filter(x => x.practice_date === d).length), mx = Math.max(1, ...cnt);
@@ -469,6 +471,33 @@ function renderNewStu() {
   if (!nsBuilt) buildNewStu();
 }
 
+// ---- Cuentas: todas las cuentas de acceso y su situación (solo administrador) ----
+// Une auth.users con students y user_roles (función admin_list_accounts, migracion_v6.sql).
+const TIPOS = { sin_perfil: 'Sin perfil', estudiante: 'Estudiante', supervisor: 'Supervisor', admin: 'Administrador', ex_personal: 'Ex personal' };
+let acBuilt = false, acUi = {}, acFilter = 'sin_perfil', acQ = '';
+const norm = t => String(t || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+function renderAccts() {
+  const card = $('accts'); card.classList.toggle('hidden', !(v4 && me?.role === 'admin'));
+  if (card.classList.contains('hidden')) return;
+  const u = acUi;
+  if (!acBuilt) { acBuilt = true;
+    u.chips = h('div', { className: 'chips' }); u.q = h('input', { type: 'search', placeholder: 'Buscar por nombre o correo', oninput: () => { acQ = u.q.value; renderAccts(); } });
+    u.list = h('div', { className: 'tbl' }); u.note = h('p', { className: 'sub' }); u.err = h('div', { className: 'err' });
+    $('accts-body').replaceChildren(h('p', { className: 'sub', textContent: 'Todas las cuentas de acceso. «Sin perfil» son cuentas creadas que aún no han entrado a llenar su perfil: todavía no aparecen en la lista de estudiantes.' }), u.err, u.chips, u.q, u.note, u.list); }
+  const cnt = k => accts.filter(a => a.tipo === k).length;
+  $('accts-sum').textContent = `Cuentas (${accts.length}${cnt('sin_perfil') ? ` · ${cnt('sin_perfil')} sin perfil` : ''})`;
+  u.err.textContent = acErr;
+  u.chips.replaceChildren(...[['todas', `Todas (${accts.length})`]].concat(Object.keys(TIPOS).filter(k => cnt(k) || k === 'sin_perfil').map(k => [k, `${TIPOS[k]} (${cnt(k)})`]))
+    .map(([k, t]) => h('button', { type: 'button', className: 'chip' + (acFilter === k ? ' on' : ''), textContent: t, onclick: () => { acFilter = k; renderAccts(); } })));
+  const q = norm(acQ).trim();
+  const rows = accts.filter(a => (acFilter === 'todas' || a.tipo === acFilter) && (!q || norm(a.nombre + ' ' + a.correo).includes(q)));
+  u.note.textContent = rows.length ? `${rows.length} ${rows.length === 1 ? 'cuenta' : 'cuentas'}` : (acErr ? '' : 'No hay cuentas con ese filtro.');
+  u.list.replaceChildren(rows.length ? h('table', { className: 'ns' }, h('thead', {}, h('tr', {}, ['Nombre', 'Correo', 'Situación', 'Creada', 'Último ingreso'].map(t => h('th', { textContent: t })))),
+    h('tbody', {}, rows.map(a => h('tr', { className: a.activo ? '' : 'skip' }, h('td', { textContent: a.nombre || '—' }), h('td', { textContent: a.correo || '—' }),
+      h('td', { textContent: TIPOS[a.tipo] + (a.activo ? '' : ' (inactivo)') }), h('td', { textContent: fDT(a.creada) }),
+      h('td', { textContent: a.ultimo_ingreso ? fDT(a.ultimo_ingreso) : 'Nunca ha entrado' }))))) : '');
+}
+
 const mins = x => x.exit_at ? Math.max(0, Math.round((new Date(x.exit_at) - new Date(x.entry_at)) / 60000)) : 0;
 const dur = m => m ? `${Math.floor(m / 60)} h ${m % 60} min` : 'en curso';
 function noteRow(n) {
@@ -579,7 +608,7 @@ function logRow(x, s) {
 $('login').onsubmit = async e => { e.preventDefault();
   const { error } = await sb.auth.signInWithPassword({ email: $('em').value, password: $('pw').value });
   if (error) return $('msg').textContent = 'Credenciales incorrectas.'; start(); };
-$('out').onclick = async () => { await sb.auth.signOut(); $('msg').textContent = ''; me = null; staffMap = {}; audit = []; lastCreated = null; staffBuilt = false; clearNewStu(); nsBuilt = false; show(true, false); };
+$('out').onclick = async () => { await sb.auth.signOut(); $('msg').textContent = ''; me = null; staffMap = {}; audit = []; accts = []; acErr = ''; acBuilt = false; acFilter = 'sin_perfil'; acQ = ''; lastCreated = null; staffBuilt = false; clearNewStu(); nsBuilt = false; show(true, false); };
 $('re').onclick = load;
 $('q').oninput = $('g').onchange = $('pg').onchange = $('ac').onchange = render;
 start();
