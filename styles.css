@@ -68,3 +68,7 @@ video{width:100%;border-radius:8px;margin-top:8px;background:#000}.hidden{displa
 button.small{width:auto;padding:8px 12px;margin-top:8px;font-size:.9rem}
 .eh{font-size:1.05rem;margin:0 0 6px}#ev-photo{margin:6px 0}#ev-photo button{margin:0 0 0 6px;vertical-align:middle}
 .imgbox img{width:100%;max-height:72vh;max-height:72dvh;object-fit:contain;border-radius:8px;background:#000;display:block}
+
+#sup-card>summary{font-weight:600;cursor:pointer}#sup-card form{margin-top:8px}#sup-card .ok{margin:8px 0 0}
+
+#f-sup input.locked{background:#eef2ee;color:#4a5a4f;border-style:dashed}

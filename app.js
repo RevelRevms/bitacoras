@@ -30,15 +30,19 @@ const ERR = {
   FOTO_INVALIDA: 'El archivo no es una imagen válida.',
   'row-level security': 'No se pudo subir el archivo. Revise la fecha y hora de su dispositivo e inténtelo de nuevo.',
   MOTIVO_TARDIO_REQUERIDO: 'Explique por qué no cerró la jornada ese día (mínimo 10 caracteres).',
-  TEXTO_DEMASIADO_LARGO: 'Uno de los textos es demasiado largo.'
+  TEXTO_DEMASIADO_LARGO: 'Uno de los textos es demasiado largo.',
+  ENCARGADO_REQUERIDO: 'Escriba el nombre del encargado de su práctica.',
+  DATO_YA_REGISTRADO: 'Ese dato ya está registrado y no se puede cambiar desde aquí. Si hay un error, avise a su supervisor de práctica.',
+  NADA_QUE_COMPLETAR: 'Escriba el dato que falta.'
 };
 const msg = t => { $('msg').textContent = t || ''; };
-const fail = e => { const m = e?.message || String(e);
-  msg(Object.entries(ERR).find(([k]) => m.includes(k))?.[1] || 'Error: ' + m); };
+const errMsg = e => { const m = e?.message || String(e);
+  return Object.entries(ERR).find(([k]) => m.includes(k))?.[1] || 'Error: ' + m; };
+const fail = e => msg(errMsg(e));
 const show = id => { SCREENS.forEach(s => $(s).classList.toggle('hidden', s !== id));
   const hv = id === 's-home' || id === 's-done'; $('hist').classList.toggle('hidden', !hv);
   $('warns').classList.toggle('hidden', !hv || !myNotes.length);
-  $('rests').classList.toggle('hidden', !hv || !futureRests().length); if (hv) { renderWarns(); renderRests(); renderHist(); } };
+  $('rests').classList.toggle('hidden', !hv || !futureRests().length); if (hv) { renderSup(); renderWarns(); renderRests(); renderHist(); } else $('sup-card').classList.add('hidden'); };
 const fmtTime = d => new Date(d).toLocaleTimeString('es-GT', { timeZone: TZ, hour12: false });
 const fmtDate = d => new Date(d + 'T12:00:00').toLocaleDateString('es-GT',
   { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
@@ -69,9 +73,7 @@ async function route() {
   if (r2.error) return fail(r2.error);
   myLogs = r2.data; log = myLogs[0]; myNotes = r3.error ? [] : (r3.data || []);
   myRests = r4.error ? [] : dedupRests(r4.data || []);
-  const info = `${student.full_name} · ${PROG[student.program] || 'Tipo sin definir'} · ${student.grade} ${student.section}` +
-    (student.institution ? ` · ${student.institution}` : '') + ` · ${student.practice_place}` + (student.supervisor_name ? ` · Supervisor: ${student.supervisor_name}` : '');
-  $('who').textContent = $('who2').textContent = info;
+  setWho();
   showAvatars();
   if (log?.status === 'in_progress') {
     const late = log.practice_date < todayGT();
@@ -292,6 +294,28 @@ $('f-extra').onsubmit = async e => { e.preventDefault(); msg('');
     if (error) { if (avPath) await sb.storage.from(PH).remove([avPath]); throw error; }
   } catch (err) { btn.disabled = false; return fail(err); }
   btn.disabled = false; xAv = null; route(); };
+
+const setWho = () => { $('who').textContent = $('who2').textContent = `${student.full_name} · ${PROG[student.program] || 'Tipo sin definir'} · ${student.grade} ${student.section}` +
+  (student.institution ? ` · ${student.institution}` : '') + ` · ${student.practice_place}` + (student.supervisor_name ? ` · Encargado: ${student.supervisor_name}` : ''); };
+// Encargado de la práctica (quien está a cargo del estudiante en la empresa): el estudiante solo puede
+// COMPLETAR lo que dejó vacío; lo ya registrado queda de solo lectura (lo corrige el personal).
+function renderSup() {
+  const ok = !!student && student.active !== false, c = $('sup-card'); c.classList.toggle('hidden', !ok); if (!ok) return;
+  const n = (student.supervisor_name || '').trim(), t = (student.supervisor_contact || '').trim(), f = $('f-sup');
+  $('sup-n').value = n; $('sup-c').value = t; $('sup-n').readOnly = !!n; $('sup-c').readOnly = !!t; $('sup-ok').textContent = '';
+  $('sup-n').required = !n; $('sup-n').classList.toggle('locked', !!n); $('sup-c').classList.toggle('locked', !!t);
+  const falta = !n || !t; f.querySelector('button').classList.toggle('hidden', !falta);
+  $('sup-info').textContent = falta ? 'Persona que está a cargo de usted en la empresa. Complete el dato que falta: el personal lo usa para ubicar a su encargado durante las visitas. Una vez guardado ya no se puede cambiar desde aquí.'
+    : 'Datos de su encargado. Si hay un error, avise a su supervisor de práctica para que lo corrija.';
+  $('sup-sum').textContent = falta ? 'Encargado de mi práctica: falta completar' : 'Encargado de mi práctica';
+  c.open = falta; }
+$('f-sup').onsubmit = async e => { e.preventDefault(); msg(''); $('sup-ok').textContent = '';
+  const b = $('f-sup').querySelector('button'); b.disabled = true;
+  try {
+    const { data, error } = await sb.rpc('update_my_supervisor', { p_name: $('sup-n').value, p_contact: $('sup-c').value });
+    if (error) throw error;
+    student = data; setWho(); renderSup(); $('sup-ok').textContent = 'Datos del encargado guardados.';
+  } catch (err) { fail(err); } finally { b.disabled = false; } };
 
 // Cambiar la foto de perfil cuando quiera
 $('b-avchg').onclick = () => $('av-chg').click();

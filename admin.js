@@ -212,7 +212,7 @@ function render() {
   const q = $('q').value.toLowerCase();
   const pf = $('pg').value, af = $('ac').value;
   const list = students.filter(s => (!sel.value || s.grade === sel.value) && (!pf || (pf === 'none' ? !s.program : s.program === pf)) && (!af || (af === 'on') === s.active) && (!kf || FILT[kf](s)) &&
-    (`${s.full_name} ${s.practice_place} ${s.institution || ''} ${s.supervisor_name || ''}`).toLowerCase().includes(q));
+    (`${s.full_name} ${s.practice_place} ${s.institution || ''} ${s.supervisor_name || ''} ${s.supervisor_contact || ''}`).toLowerCase().includes(q));
   const openIds = new Set([...document.querySelectorAll('#list details[open]')].map(d => d.id));   // conserva lo expandido
   const note = kf ? h('div', { className: 'fnote' }, `Filtro: ${NAMES[kf]}. ${list.length} ${list.length === 1 ? 'estudiante' : 'estudiantes'}.`,
     h('button', { type: 'button', className: 'sec', textContent: 'Quitar filtro', onclick: () => { kf = ''; render(); } })) : '';
@@ -353,7 +353,7 @@ function staffRow(u) {
     h('span', { textContent: `${former ? 'Antes supervisor (sin rol)' : roleName(u.role)}${!former && !u.active ? ' · INACTIVO' : ''} · ${u.email || ''}` }),
     adm && !self ? h('span', { textContent: 'Los administradores se asignan con SQL; no se modifican desde el panel.' }) : ''), acts);
 }
-const FIELD = { active: 'activo', program: 'tipo de práctica', full_name: 'nombre', grade: 'grado', section: 'sección', practice_place: 'dirección', institution: 'empresa', supervisor_name: 'supervisor', supervisor_contact: 'contacto del supervisor', rol: 'rol', activo: 'activo', nombre: 'nombre' };
+const FIELD = { active: 'activo', program: 'tipo de práctica', full_name: 'nombre', grade: 'grado', section: 'sección', practice_place: 'dirección', institution: 'empresa', supervisor_name: 'encargado', supervisor_contact: 'contacto del encargado', rol: 'rol', activo: 'activo', nombre: 'nombre' };
 const val2 = v => v === null || v === undefined ? '—' : v === true ? 'sí' : v === false ? 'no' : v === 'practica' ? 'Práctica Supervisada' : v === 'prepractica' ? 'Prepráctica' : v === 'student' ? 'sin rol' : v === 'supervisor' ? 'supervisor' : String(v);
 function describe(a) {
   const stu = students.find(s => s.id === a.student_id), tgt = staffMap[a.target_user], d = a.detail || {};
@@ -525,9 +525,9 @@ function studentRow(s) {
       : h('button', { type: 'button', className: 'sec', textContent: 'Asignar Práctica Supervisada', onclick: () => setProgramFirst(s, 'practica') }),
     !s.program ? h('button', { type: 'button', className: 'sec', textContent: 'Asignar Prepráctica', onclick: () => setProgramFirst(s, 'prepractica') }) : '');
   return h('details', { className: 'stu' + (s.active ? '' : ' off'), id: 'stu-' + s.id }, h('summary', {}, avatar(s),
-    h('div', { className: 'who' }, h('b', { textContent: s.full_name + (s.active ? '' : ' (inactivo)') }), s.active ? '' : h('span', { className: 'pg off', textContent: 'Inactivo' }), h('span', { className: 'pg ' + (s.program || 'none'), textContent: progName(s.program) }), led,
+    h('div', { className: 'who' }, h('b', { textContent: s.full_name + (s.active ? '' : ' (inactivo)') }), s.active ? '' : h('span', { className: 'pg off', textContent: 'Inactivo' }), h('span', { className: 'pg ' + (s.program || 'none'), textContent: progName(s.program) }), h('span', { className: 'enc', textContent: s.supervisor_name ? `Encargado: ${s.supervisor_name}${s.supervisor_contact ? ' · ' + s.supervisor_contact : ''}` : 'Encargado: sin registrar' }), led,
       h('div', { className: 'facts' }, fact('Tipo de práctica', progName(s.program)), fact('Empresa o institución', s.institution), fact('Dirección de la empresa', s.practice_place),
-        fact('Supervisor', s.supervisor_name), fact('Contacto del supervisor', s.supervisor_contact),
+        fact('Encargado de la práctica', s.supervisor_name), fact('Contacto del encargado', s.supervisor_contact),
         fact('Grado y sección', `${s.grade}, sección ${s.section}`))),
     h('div', { className: 'cnt' }, h('b', { textContent: n }), n === 1 ? ' bitácora' : ' bitácoras',
       inc ? h('em', { textContent: inc === 1 ? '1 incidente' : inc + ' incidentes' }) : '',
