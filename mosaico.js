@@ -60,7 +60,12 @@ async function load() {
     .eq('practice_date', $('d').value).not('video_path', 'is', null).order('entry_at').limit(500);
   if (l.error) return expired(l.error) ? gate('Su sesión venció. Entre de nuevo.') : $('msg2').textContent = l.error.message;
   if (!ready) return;
-  logs = l.data; urls = {};
+  // videos ya archivados y eliminados de Supabase (migracion_v8): no se pueden reproducir, se omiten
+  let gone = new Set();
+  try { const ar = await sb.from('video_archive').select('log_id').like('video_path', '%/' + $('d').value + '/%').not('removed_at', 'is', null).limit(1000);
+    if (!ar.error) gone = new Set((ar.data || []).map(a => a.log_id)); } catch {}
+  logs = l.data.filter(x => !gone.has(x.id)); urls = {};
+  if (gone.size && !$('msg2').textContent) $('msg2').textContent = `${gone.size} ${gone.size === 1 ? 'video de este día ya fue archivado' : 'videos de este día ya fueron archivados'} y no se muestra${gone.size === 1 ? '' : 'n'}.`;
   await signAvatars();
   if (!ready) return;
   render();

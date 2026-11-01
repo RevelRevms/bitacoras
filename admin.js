@@ -5,6 +5,7 @@ const REINC_N = 3, REINC_DIAS = 30;
 const PROG = { practica: 'Práctica Supervisada', prepractica: 'Prepráctica' };
 const progName = p => PROG[p] || 'Sin definir';
 let students = [], logs = [], notes = [], rests = [], kf = '', avs = {};
+let arch = [], archMap = {}, archErr = '', vdBuilt = false, vdUi = {}, vd = { verified: [], failed: [], busy: false, ctrl: null, note: '', skipped: 0 }, vdTo = '';
 let me = null, staffMap = {}, audit = [], accts = [], acErr = '', v4 = true, staffBuilt = false, staffUi = {}, lastCreated = null;   // v4 = ¿ya se ejecutó migracion_v4.sql?   // kf = filtro activo de los indicadores superiores
 const h = (t, p = {}, ...k) => { const e = document.createElement(t);
   for (const [a, v] of Object.entries(p)) a === 'onclick' ? e.onclick = v : e[a] = v;
@@ -49,7 +50,8 @@ const ERRS = {
   NO_ESTA_ABIERTA: 'Esa jornada ya no está abierta (quizá el estudiante la cerró). Se actualizará la lista.',
   AUN_ES_DEL_DIA: 'Solo se pueden cerrar jornadas de días anteriores.',
   MOTIVO_REQUERIDO: 'Escriba un motivo de al menos 5 caracteres.',
-  BITACORA_NO_ENCONTRADA: 'No se encontró la bitácora.'
+  BITACORA_NO_ENCONTRADA: 'No se encontró la bitácora.',
+  DEMASIADOS_VIDEOS: 'Son demasiados videos para una sola operación.'
 };
 const errText = e => Object.entries(ERRS).find(([k]) => (e.message || '').includes(k))?.[1] || 'No se pudo completar la acción: ' + (e.message || e);
 
@@ -66,14 +68,17 @@ async function start() {
   $('msg').textContent = ''; show(false, true); load();
 }
 async function load() {
-  const [s, l, n, rd, sd, au, ac] = await Promise.all([
+  const [s, l, n, rd, sd, au, ac, va] = await Promise.all([
     sb.from('students').select('*').order('full_name'),
     sb.from('daily_logs').select('*').order('practice_date', { ascending: false }).limit(5000),
     sb.from('admin_notes').select('*').order('created_at', { ascending: false }).limit(2000),
     sb.from('rest_days').select('*').order('rest_date', { ascending: false }).limit(3000),
     v4 ? sb.rpc('staff_directory') : Promise.resolve({ data: [] }),
     v4 && me?.role === 'admin' ? sb.from('staff_audit').select('*').order('at', { ascending: false }).limit(300) : Promise.resolve({ data: [] }),
-    v4 && me?.role === 'admin' ? sb.rpc('admin_list_accounts') : Promise.resolve({ data: [] })]);
+    v4 && me?.role === 'admin' ? sb.rpc('admin_list_accounts') : Promise.resolve({ data: [] }),
+    sb.from('video_archive').select('*').limit(5000)]);
+  arch = va.error ? [] : va.data || []; archMap = Object.fromEntries(arch.map(a => [a.log_id, a]));
+  archErr = va.error ? (/video_archive|42P01|PGRST205|schema cache/.test(va.error.message || va.error.code || '') ? 'Falta ejecutar migracion_v8.sql en Supabase.' : errText(va.error)) : '';
   staffMap = Object.fromEntries((sd.error ? [] : sd.data || []).map(x => [x.user_id, x])); audit = au.error ? [] : au.data || [];
   accts = ac.error ? [] : ac.data || []; acErr = ac.error ? (/Could not find the function|PGRST202/.test(ac.error.message || '') ? 'Falta ejecutar migracion_v6.sql en Supabase.' : errText(ac.error)) : '';
   if (s.error || l.error) return $('msg').textContent = (s.error || l.error).message;
@@ -195,7 +200,7 @@ function render() {
 
   renderPending(today, byId);
   renderRest(today);
-  renderStaff(); renderNewStu(); renderAccts();
+  renderStaff(); renderNewStu(); renderAccts(); renderVids();
 
   const days = [...Array(14)].map((_, i) => shiftDay(today, i - 13));
   const cnt = days.map(d => logs.filter(x => x.practice_date === d).length), mx = Math.max(1, ...cnt);
@@ -360,6 +365,8 @@ function describe(a) {
   const ch = Object.entries(d).filter(([, v]) => v && typeof v === 'object' && 'a' in v).map(([k, v]) => `${FIELD[k] || k}: ${val2(v.de)} → ${val2(v.a)}`).join('; ');
   if (a.action === 'personal_creado') return `Creó la cuenta de supervisor ${d.nombre} (${d.correo})`;
   if (a.action === 'estudiantes_creados') return `Creó ${d.creados} ${d.creados === 1 ? 'cuenta' : 'cuentas'} de estudiantes${d.omitidos ? ` (${d.omitidos} ya existían)` : ''}`;
+  if (a.action === 'videos_archivados') return `Archivó ${d.cantidad} ${d.cantidad === 1 ? 'video' : 'videos'} (${fSize(d.bytes)}) para eliminarlos de Supabase`;
+  if (a.action === 'videos_eliminados') return `Eliminó de Supabase ${d.cantidad} ${d.cantidad === 1 ? 'video' : 'videos'} (${fSize(d.bytes)}) ya descargados`;
   if (a.action === 'personal_asignado') return `Asignó el rol de supervisor a ${d.nombre} (${d.correo})`;
   if (a.action === 'personal_modificado') return `Modificó a ${tgt?.full_name || 'personal'}: ${ch}`;
   if (a.action === 'estudiante_modificado') return `Modificó a ${stu?.full_name || 'un estudiante'}: ${ch}`;
@@ -498,6 +505,116 @@ function renderAccts() {
       h('td', { textContent: a.ultimo_ingreso ? fDT(a.ultimo_ingreso) : 'Nunca ha entrado' }))))) : '');
 }
 
+// ---- Videos y espacio: descargar a una carpeta y eliminar de Supabase (solo administrador) ----
+// Flujo: 1) se baja cada video a una carpeta elegida y se comprueba que el tamaño coincida con el registrado;
+// 2) solo los verificados se registran como archivados (admin_archive_videos) y se borran de Storage;
+// 3) la base confirma cuáles ya no existen (admin_confirm_videos_removed). Si algo falla, no se borra nada sin verificar.
+const fSize = b => b >= 1073741824 ? (b / 1073741824).toFixed(2) + ' GB' : (b / 1048576).toFixed(1) + ' MB';
+const safeName = t => String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^\w\s.-]/g, '').replace(/\s+/g, ' ').trim().slice(0, 60) || 'sin_nombre';
+const sizeOf = x => Number(x.video_size) || 0;
+const vdInactive = id => students.find(z => z.id === id)?.active === false;   // solo estudiantes inactivos
+const vdEligible = () => logs.filter(x => x.status !== 'in_progress' && x.video_path && !archMap[x.id] && vdInactive(x.student_id) && (!vdTo || x.practice_date <= vdTo));
+const vdPending = () => arch.filter(a => !a.removed_at);
+const vdSetNote = t => { vd.note = t; if (vdUi.note) vdUi.note.textContent = t; };
+async function vdSaveOne(root, x) {
+  const s = students.find(z => z.id === x.student_id), dh = await root.getDirectoryHandle(safeName(s?.full_name || x.student_id), { create: true });
+  const ext = (String(x.video_path).split('.').pop() || 'mp4').toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 5) || 'mp4';
+  const name = `${x.practice_date}_${String(x.id).slice(0, 8)}.${ext}`, size = sizeOf(x);
+  if (!size) throw new Error('el tamaño original no está registrado');
+  try { const f = await (await dh.getFileHandle(name)).getFile(); if (f.size === size) return { dir: dh.name, name, reused: true }; } catch {}
+  const r = await sb.storage.from('practice-videos').createSignedUrl(x.video_path, 3600);
+  if (r.error) throw new Error('no se pudo generar el enlace (' + r.error.message + ')');
+  const res = await fetch(r.data.signedUrl, { signal: vd.ctrl.signal });
+  if (!res.ok || !res.body) throw new Error('la descarga falló (' + res.status + ')');
+  const fh = await dh.getFileHandle(name, { create: true }), w = await fh.createWritable(); let n = 0;
+  try { const rd = res.body.getReader();
+    for (;;) { const { done, value } = await rd.read(); if (done) break; await w.write(value); n += value.length; }
+    await w.close();
+  } catch (e) { try { await w.abort(); } catch {} throw e; }
+  const got = (await fh.getFile()).size;
+  if (n !== size || got !== size) { try { await dh.removeEntry(name); } catch {} throw new Error(`el tamaño no coincide (${got} de ${size} bytes)`); }
+  return { dir: dh.name, name, reused: false };
+}
+async function vdDownload() {
+  if (vd.busy) return;
+  if (!window.showDirectoryPicker) return vdSetNote('Este navegador no puede guardar en una carpeta. Use Chrome o Edge en una computadora.');
+  const todo = vdEligible();
+  if (!todo.length) return vdSetNote('No hay videos pendientes con ese filtro.');
+  let root; try { root = await window.showDirectoryPicker({ mode: 'readwrite', id: 'bitacora-videos' }); } catch { return; }   // cancelado
+  vd.busy = true; vd.ctrl = new AbortController(); vd.verified = []; vd.failed = []; vd.skipped = 0; renderVids();
+  const rows = [];
+  for (let i = 0; i < todo.length; i++) {
+    const x = todo[i], s = students.find(z => z.id === x.student_id);
+    if (vd.ctrl.signal.aborted) break;
+    vdSetNote(`Descargando ${i + 1} de ${todo.length}: ${s?.full_name || ''} · ${x.practice_date} (${fSize(sizeOf(x))})`);
+    try { const f = await vdSaveOne(root, x); vd.verified.push(x); if (f.reused) vd.skipped++;
+      rows.push([s?.full_name || '', x.practice_date, f.dir + '/' + f.name, sizeOf(x), x.id, f.reused ? 'ya estaba en la carpeta' : 'descargado']);
+    } catch (e) { if (vd.ctrl.signal.aborted) break; vd.failed.push({ x, why: e.message || String(e) }); }
+  }
+  const stopped = vd.ctrl.signal.aborted;
+  if (rows.length) { try { const q = v => `"${String(v).replace(/"/g, '""')}"`, stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
+    const fh = await root.getFileHandle(`indice_videos_${stamp}.csv`, { create: true }), w = await fh.createWritable();
+    await w.write('﻿' + [['estudiante', 'fecha', 'archivo', 'bytes', 'jornada_id', 'estado']].concat(rows).map(r => r.map(q).join(',')).join('\r\n')); await w.close(); } catch {} }
+  vd.busy = false; vd.ctrl = null;
+  const t = vd.verified.reduce((a, x) => a + sizeOf(x), 0);
+  vdSetNote(`${stopped ? 'Detenido. ' : ''}Verificados en su carpeta: ${vd.verified.length} (${fSize(t)})${vd.skipped ? `, ${vd.skipped} ya estaban` : ''}.${vd.failed.length ? ` Con error: ${vd.failed.length} (no se eliminarán).` : ''}`);
+  renderVids();
+}
+async function vdRemove(items) {   // items: { id, path, size, archived }
+  if (vd.busy || !items.length) return;
+  const total = items.reduce((a, x) => a + (x.size || 0), 0);
+  const word = prompt(`Se eliminarán de Supabase ${items.length} ${items.length === 1 ? 'video' : 'videos'} (${fSize(total)}) que ya están guardados en su carpeta.\n\nEsta acción NO se puede deshacer.\n\nPara confirmar escriba ELIMINAR`);
+  if ((word || '').trim().toUpperCase() !== 'ELIMINAR') return vdSetNote('No se eliminó nada.');
+  vd.busy = true; renderVids();
+  const chunk = (a, n) => Array.from({ length: Math.ceil(a.length / n) }, (_, i) => a.slice(i * n, i * n + n));
+  let confirmed = 0, problem = '';
+  try {
+    for (const c of chunk(items.filter(x => !x.archived), 200)) { vdSetNote('Registrando el archivo…');
+      const r = await sb.rpc('admin_archive_videos', { p_log_ids: c.map(x => x.id) }); if (r.error) throw r.error; }
+    let done = 0;
+    for (const c of chunk(items, 50)) { vdSetNote(`Eliminando de Supabase… ${done} de ${items.length}`);
+      const r = await sb.storage.from('practice-videos').remove(c.map(x => x.path)); if (r.error) { problem = r.error.message; break; } done += c.length; }
+    for (const c of chunk(items, 200)) { const r = await sb.rpc('admin_confirm_videos_removed', { p_log_ids: c.map(x => x.id) }); if (r.error) throw r.error; confirmed += r.data || 0; }
+  } catch (e) { problem = errText(e); }
+  vd.busy = false; vd.verified = []; vd.failed = [];
+  await load();
+  vdSetNote(`Eliminados de Supabase: ${confirmed} de ${items.length}.` + (confirmed < items.length ? ` ${items.length - confirmed} quedaron archivados con la eliminación pendiente${problem ? ' (' + problem + ')' : ''}; puede reintentarlo con el botón de abajo.` : ' Espacio liberado.'));
+  renderVids();
+}
+function renderVids() {
+  const card = $('vids'); card.classList.toggle('hidden', !(v4 && me?.role === 'admin'));
+  if (card.classList.contains('hidden')) return;
+  const u = vdUi;
+  if (!vdBuilt) { vdBuilt = true;
+    u.stat = h('p', { className: 'sub' }); u.err = h('div', { className: 'err' }); u.note = h('p', { className: 'sub', ariaLive: 'polite' });
+    u.to = h('input', { type: 'date', oninput: () => { vdTo = u.to.value; renderVids(); } });
+    u.go = h('button', { type: 'button', textContent: 'Elegir carpeta y descargar', onclick: vdDownload });
+    u.stop = h('button', { type: 'button', className: 'sec', textContent: 'Detener', onclick: () => vd.ctrl?.abort() });
+    u.del = h('button', { type: 'button', className: 'danger', onclick: () => vdRemove(vd.verified.map(x => ({ id: x.id, path: x.video_path, size: sizeOf(x), archived: !!archMap[x.id] }))) });
+    u.retry = h('button', { type: 'button', className: 'danger', onclick: () => vdRemove(vdPending().map(a => ({ id: a.log_id, path: a.video_path, size: Number(a.video_size) || 0, archived: true }))) });
+    u.fail = h('div', { className: 'tbl' }); u.by = h('div', { className: 'tbl' }); u.warn = h('p', { className: 'err' });
+    $('vids-body').replaceChildren(
+      h('p', { className: 'sub', textContent: 'Para liberar espacio: descargue a una carpeta de esta computadora los videos de los estudiantes INACTIVOS (los de estudiantes activos nunca se tocan) y, cuando estén verificados, elimínelos de Supabase. Las bitácoras (fechas, actividades, notas) se conservan; solo se quita el archivo de video, y el panel lo indicará como «archivado». Las jornadas en curso no se tocan.' }),
+      u.err, u.stat, u.by, h('label', { className: 'vdlab' }, 'Hasta el día (inclusive; vacío = todos los pendientes) ', u.to),
+      h('div', { className: 'acts' }, u.go, u.stop), u.warn, u.note, u.fail, h('div', { className: 'acts' }, u.del), h('div', { className: 'acts' }, u.retry)); }
+  const el = vdEligible(), tot = el.reduce((a, x) => a + sizeOf(x), 0), pend = vdPending(), gone = arch.filter(a => a.removed_at);
+  $('vids-sum').textContent = `Videos y espacio (${el.length} por archivar · ${fSize(tot)})`;
+  u.err.textContent = archErr;
+  const per = new Map(); el.forEach(x => { const r = per.get(x.student_id) || { n: 0, b: 0 }; r.n++; r.b += sizeOf(x); per.set(x.student_id, r); });
+  u.by.replaceChildren(per.size ? h('table', { className: 'ns' }, h('thead', {}, h('tr', {}, ['Estudiante inactivo', 'Videos', 'Tamaño'].map(t => h('th', { textContent: t })))),
+    h('tbody', {}, [...per].map(([id, r]) => h('tr', {}, h('td', { textContent: students.find(z => z.id === id)?.full_name || '' }), h('td', { textContent: String(r.n) }), h('td', { textContent: fSize(r.b) }))))) : '');
+  u.stat.textContent = `Con el filtro actual: ${el.length} ${el.length === 1 ? 'video' : 'videos'} (${fSize(tot)}) por descargar de estudiantes inactivos. Ya archivados y eliminados: ${gone.length}.`;
+  u.warn.textContent = window.showDirectoryPicker ? '' : 'Este navegador no puede guardar en una carpeta. Para descargar y eliminar videos use Chrome o Edge en una computadora.';
+  u.go.disabled = vd.busy || !el.length || !!archErr; u.stop.classList.toggle('hidden', !vd.busy); u.to.disabled = vd.busy;
+  const vt = vd.verified.reduce((a, x) => a + sizeOf(x), 0);
+  u.del.classList.toggle('hidden', vd.busy || !vd.verified.length);
+  u.del.textContent = `Eliminar de Supabase los ${vd.verified.length} ${vd.verified.length === 1 ? 'video verificado' : 'videos verificados'} (${fSize(vt)})`;
+  u.retry.classList.toggle('hidden', vd.busy || !pend.length);
+  u.retry.textContent = `Reintentar la eliminación de ${pend.length} ${pend.length === 1 ? 'video archivado' : 'videos archivados'} pendiente${pend.length === 1 ? '' : 's'}`;
+  u.fail.replaceChildren(vd.failed.length ? h('table', { className: 'ns' }, h('thead', {}, h('tr', {}, ['Estudiante', 'Día', 'Problema'].map(t => h('th', { textContent: t })))),
+    h('tbody', {}, vd.failed.map(f => h('tr', {}, h('td', { textContent: students.find(z => z.id === f.x.student_id)?.full_name || '' }), h('td', { textContent: f.x.practice_date }), h('td', { textContent: f.why }))))) : '');
+}
+
 const mins = x => x.exit_at ? Math.max(0, Math.round((new Date(x.exit_at) - new Date(x.entry_at)) / 60000)) : 0;
 const dur = m => m ? `${Math.floor(m / 60)} h ${m % 60} min` : 'en curso';
 function noteRow(n) {
@@ -583,8 +700,11 @@ function logRow(x, s) {
   if (x.start_photo_path) body.append(h('dt', { textContent: 'Foto de inicio' }), h('dd', {},
     h('button', { type: 'button', className: 'sec', textContent: 'Ver foto de inicio', onclick: ev => openPhoto(x, ev.currentTarget) })));
   else if (x.status !== 'unclosed') row('Foto de inicio', 'Sin foto (jornada anterior a esta función)');
-  if (x.video_path) body.append(h('dt', { textContent: 'Video' }), h('dd', {},
-    h('button', { type: 'button', className: 'sec', textContent: 'Reproducir evidencia', onclick: ev => openVideo(x, ev.currentTarget) })));
+  if (x.video_path) { const ar = archMap[x.id];
+    body.append(h('dt', { textContent: 'Video' }), h('dd', {}, ar?.removed_at
+      ? `Archivado: descargado y eliminado de Supabase el ${fDT(ar.removed_at)}.`
+      : [h('button', { type: 'button', className: 'sec', textContent: 'Reproducir evidencia', onclick: ev => openVideo(x, ev.currentTarget) }),
+         ar ? ' Archivado; la eliminación de Supabase está pendiente.' : ''])); }
   const ln = notes.filter(n => n.log_id === x.id);
   if (ln.length) body.append(h('dt', { textContent: 'Notas del administrador' }), h('dd', { className: 'notes' }, ln.map(noteRow)));
   if (s && (stale || un || late)) body.append(h('dt', { textContent: 'Acciones' }), h('dd', { className: 'acts' },
@@ -601,14 +721,14 @@ function logRow(x, s) {
     h('div', { className: 'who' }, h('b', { textContent: title }), h('span', { textContent: sub })),
     h('div', { className: 'marks' }, stale ? h('em', { textContent: 'Sin cerrar' }) : '', un ? h('em', { textContent: 'No concluida' }) : '',
       late ? h('em', { className: 'warn', textContent: 'Cierre tardío' }) : '',
-      x.has_incident ? h('em', { textContent: 'Incidente' }) : '', x.start_photo_path ? h('span', { textContent: 'Foto' }) : '', x.video_path ? h('span', { textContent: 'Video' }) : '',
+      x.has_incident ? h('em', { textContent: 'Incidente' }) : '', x.start_photo_path ? h('span', { textContent: 'Foto' }) : '', x.video_path ? h('span', { textContent: archMap[x.id]?.removed_at ? 'Video archivado' : 'Video' }) : '',
       lp0(x, s) ? h('span', { className: 'pg ' + lp0(x, s), textContent: progName(lp0(x, s)) }) : ''),
     h('span', { className: 'sign' })), body);
 }
 $('login').onsubmit = async e => { e.preventDefault();
   const { error } = await sb.auth.signInWithPassword({ email: $('em').value, password: $('pw').value });
   if (error) return $('msg').textContent = 'Credenciales incorrectas.'; start(); };
-$('out').onclick = async () => { await sb.auth.signOut(); $('msg').textContent = ''; me = null; staffMap = {}; audit = []; accts = []; acErr = ''; acBuilt = false; acFilter = 'sin_perfil'; acQ = ''; lastCreated = null; staffBuilt = false; clearNewStu(); nsBuilt = false; show(true, false); };
+$('out').onclick = async () => { await sb.auth.signOut(); $('msg').textContent = ''; me = null; staffMap = {}; audit = []; accts = []; acErr = ''; acBuilt = false; arch = []; archMap = {}; archErr = ''; vdBuilt = false; vdTo = ''; vd = { verified: [], failed: [], busy: false, ctrl: null, note: '', skipped: 0 }; acFilter = 'sin_perfil'; acQ = ''; lastCreated = null; staffBuilt = false; clearNewStu(); nsBuilt = false; show(true, false); };
 $('re').onclick = load;
 $('q').oninput = $('g').onchange = $('pg').onchange = $('ac').onchange = render;
 start();

@@ -3,7 +3,7 @@ const sb = supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY,
 const $ = id => document.getElementById(id);
 const TZ = 'America/Guatemala', MAX = 10 * 1024 * 1024;
 const SCREENS = ['s-login','s-profile','s-extra','s-home','s-form','s-done','s-staff'];
-let user, student, log, myLogs = [], myNotes = [], myRests = [], video = null; // video = {blob, type, name} (solo para la vista previa local)
+let user, student, log, myLogs = [], myNotes = [], myRests = [], video = null, myArch = {}; // video = {blob, type, name} (solo para la vista previa local)
 
 const ERR = {
   JORNADA_YA_INICIADA: 'Ya inició una jornada hoy.',
@@ -73,6 +73,8 @@ async function route() {
   if (r2.error) return fail(r2.error);
   myLogs = r2.data; log = myLogs[0]; myNotes = r3.error ? [] : (r3.data || []);
   myRests = r4.error ? [] : dedupRests(r4.data || []);
+  try { const ar = await sb.from('video_archive').select('log_id,removed_at').limit(2000);   // videos archivados (migracion_v8): ya no están en el servidor
+    myArch = Object.fromEntries((ar.error ? [] : ar.data || []).filter(a => a.removed_at).map(a => [a.log_id, true])); } catch { myArch = {}; }
   setWho();
   showAvatars();
   if (log?.status === 'in_progress') {
@@ -242,7 +244,8 @@ function renderHist() {
     const un = x.status === 'unclosed';
     if (un) { row('Estado', 'Jornada no concluida: la cerró el administrador', 'bad'); row('Motivo', x.admin_note, 'bad'); }
     if (x.closed_late) { row('Cierre tardío', 'Se cerró después del día de la práctica'); row('Motivo del retraso', x.late_reason); }
-    if (x.video_path) { const vb = el('div');
+    if (x.video_path && myArch[x.id]) row('Video de evidencia', 'Archivado por la institución; ya no se puede ver desde aquí.');
+    else if (x.video_path) { const vb = el('div');
       body.append(el('dt', { textContent: 'Video de evidencia' }), el('dd', {}, el('button', { type: 'button', className: 'sec', textContent: 'Ver mi video',
         onclick: async () => { const r = await sb.storage.from('practice-videos').createSignedUrl(x.video_path, 300);
           if (r.error) return vb.textContent = 'No se pudo cargar el video.';
