@@ -366,6 +366,7 @@ function describe(a) {
   if (a.action === 'personal_creado') return `Creó la cuenta de supervisor ${d.nombre} (${d.correo})`;
   if (a.action === 'estudiantes_creados') return `Creó ${d.creados} ${d.creados === 1 ? 'cuenta' : 'cuentas'} de estudiantes${d.omitidos ? ` (${d.omitidos} ya existían)` : ''}`;
   if (a.action === 'videos_archivados') return `Archivó ${d.cantidad} ${d.cantidad === 1 ? 'video' : 'videos'} (${fSize(d.bytes)}) para eliminarlos de Supabase`;
+  if (a.action === 'videos_restaurados') return `Restauró ${d.cantidad} ${d.cantidad === 1 ? 'video' : 'videos'} (${fSize(d.bytes)}) en Supabase desde la carpeta descargada`;
   if (a.action === 'videos_eliminados') return `Eliminó de Supabase ${d.cantidad} ${d.cantidad === 1 ? 'video' : 'videos'} (${fSize(d.bytes)}) ya descargados`;
   if (a.action === 'personal_asignado') return `Asignó el rol de supervisor a ${d.nombre} (${d.correo})`;
   if (a.action === 'personal_modificado') return `Modificó a ${tgt?.full_name || 'personal'}: ${ch}`;
@@ -581,6 +582,62 @@ async function vdRemove(items) {   // items: { id, path, size, archived }
   vdSetNote(`Eliminados de Supabase: ${confirmed} de ${items.length}.` + (confirmed < items.length ? ` ${items.length - confirmed} quedaron archivados con la eliminación pendiente${problem ? ' (' + problem + ')' : ''}; puede reintentarlo con el botón de abajo.` : ' Espacio liberado.'));
   renderVids();
 }
+// ---- Restaurar: volver a subir a Supabase los videos archivados desde la carpeta descargada ----
+// Empareja cada archivo por «AAAA-MM-DD_xxxxxxxx.ext» (fecha e inicio del id de la jornada), comprueba el tamaño original,
+// lo sube a su ruta original y la base confirma que existe con ese tamaño antes de quitar el registro de archivado.
+const MIME = { mp4: 'video/mp4', webm: 'video/webm', mov: 'video/quicktime' };
+const vdRestorable = () => arch.filter(a => a.removed_at);
+async function* vdWalk(dir, depth = 0) {
+  for await (const e of dir.values()) {
+    if (e.kind === 'directory') { if (depth < 2) yield* vdWalk(e, depth + 1); } else if (e.kind === 'file') yield e;
+  }
+}
+async function vdRestore() {
+  if (vd.busy) return;
+  if (!window.showDirectoryPicker) return vdSetNote('Este navegador no puede leer una carpeta. Use Chrome o Edge en una computadora.');
+  const cand = vdRestorable();
+  if (!cand.length) return vdSetNote('No hay videos archivados y eliminados para restaurar.');
+  let root; try { root = await window.showDirectoryPicker({ mode: 'read', id: 'bitacora-videos' }); } catch { return; }   // cancelado
+  vd.busy = true; vd.ctrl = new AbortController(); vd.verified = []; vd.failed = []; renderVids(); vdSetNote('Buscando los videos en la carpeta…');
+  const byKey = new Map(cand.map(a => [`${String(a.video_path).split('/')[1]}_${String(a.log_id).slice(0, 8)}`, a]));
+  const found = new Map(); let dup = 0, other = 0;
+  try {
+    for await (const fh of vdWalk(root)) {
+      const m = /^(\d{4}-\d{2}-\d{2})_([0-9a-f]{8})\.(mp4|webm|mov)$/i.exec(fh.name), a = m && byKey.get(`${m[1]}_${m[2].toLowerCase()}`);
+      if (!a) { other++; continue; }
+      if (found.has(a.log_id)) { dup++; continue; }
+      found.set(a.log_id, { a, fh, ext: m[3].toLowerCase() });
+    }
+  } catch (e) { vd.busy = false; vd.ctrl = null; vdSetNote('No se pudo leer la carpeta: ' + (e.message || e)); return renderVids(); }
+  const list = [...found.values()], bytes = list.reduce((t, x) => t + (Number(x.a.video_size) || 0), 0);
+  if (!list.length) { vd.busy = false; vd.ctrl = null; vdSetNote(`No se encontró en esa carpeta ningún video archivado (${other} archivos no coinciden). Elija la carpeta donde descargó los videos.`); return renderVids(); }
+  if (!confirm(`Se encontraron ${list.length} de ${cand.length} videos archivados (${fSize(bytes)}). Se volverán a subir a Supabase y ocuparán espacio de almacenamiento.\n\n¿Restaurarlos ahora?`)) {
+    vd.busy = false; vd.ctrl = null; vdSetNote('No se restauró nada.'); return renderVids(); }
+  const ready = []; let done = 0;
+  for (const it of list) {
+    if (vd.ctrl.signal.aborted) break;
+    const s = students.find(z => z.id === logs.find(l => l.id === it.a.log_id)?.student_id), day = String(it.a.video_path).split('/')[1];
+    vdSetNote(`Restaurando ${++done} de ${list.length}: ${s?.full_name || ''} · ${day} (${fSize(Number(it.a.video_size) || 0)})`);
+    const why = m => vd.failed.push({ x: { student_id: s?.id, practice_date: day }, why: m });
+    try {
+      const file = await it.fh.getFile(), want = Number(it.a.video_size) || 0;
+      if (want && file.size !== want) { why(`el tamaño de la carpeta no coincide (${file.size} de ${want} bytes)`); continue; }
+      const up = await sb.storage.from('practice-videos').upload(it.a.video_path, file, { contentType: MIME[it.ext], upsert: false });
+      if (up.error && !/already exists|duplicate/i.test(up.error.message || '')) { why('no se pudo subir (' + up.error.message + ')'); continue; }
+      ready.push(it);
+    } catch (e) { why(e.message || String(e)); }
+  }
+  const stopped = vd.ctrl.signal.aborted; let confirmed = 0;
+  try {
+    for (let i = 0; i < ready.length; i += 200) { const c = ready.slice(i, i + 200);
+      const r = await sb.rpc('admin_confirm_videos_restored', { p_log_ids: c.map(x => x.a.log_id) }); if (r.error) throw r.error; confirmed += r.data || 0; }
+  } catch (e) { vd.failed.push({ x: { practice_date: '' }, why: 'no se pudo confirmar en la base: ' + errText(e) }); }
+  if (confirmed < ready.length) vd.failed.push({ x: { practice_date: '' }, why: `${ready.length - confirmed} videos se subieron pero la base no pudo verificar su tamaño; no se marcaron como restaurados` });
+  vd.busy = false; vd.ctrl = null;
+  const fails = vd.failed; await load(); vd.failed = fails;
+  vdSetNote(`${stopped ? 'Detenido. ' : ''}Restaurados: ${confirmed} de ${list.length}.` + (cand.length - list.length ? ` No estaban en la carpeta: ${cand.length - list.length}.` : '') + (dup ? ` Repetidos ignorados: ${dup}.` : '') + (fails.length ? ` Con problema: ${fails.length}.` : confirmed ? ' Las jornadas vuelven a mostrar «Reproducir evidencia».' : ''));
+  renderVids();
+}
 function renderVids() {
   const card = $('vids'); card.classList.toggle('hidden', !(v4 && me?.role === 'admin'));
   if (card.classList.contains('hidden')) return;
@@ -593,10 +650,12 @@ function renderVids() {
     u.del = h('button', { type: 'button', className: 'danger', onclick: () => vdRemove(vd.verified.map(x => ({ id: x.id, path: x.video_path, size: sizeOf(x), archived: !!archMap[x.id] }))) });
     u.retry = h('button', { type: 'button', className: 'danger', onclick: () => vdRemove(vdPending().map(a => ({ id: a.log_id, path: a.video_path, size: Number(a.video_size) || 0, archived: true }))) });
     u.fail = h('div', { className: 'tbl' }); u.by = h('div', { className: 'tbl' }); u.warn = h('p', { className: 'err' });
+    u.rtxt = h('p', { className: 'sub' }); u.rbtn = h('button', { type: 'button', className: 'sec', textContent: 'Elegir carpeta y restaurar', onclick: vdRestore });
+    u.rest = h('div', { className: 'vdrest' }, h('h3', { textContent: 'Restaurar videos archivados' }), u.rtxt, h('div', { className: 'acts' }, u.rbtn));
     $('vids-body').replaceChildren(
       h('p', { className: 'sub', textContent: 'Para liberar espacio: descargue a una carpeta de esta computadora los videos de los estudiantes INACTIVOS (los de estudiantes activos nunca se tocan) y, cuando estén verificados, elimínelos de Supabase. Las bitácoras (fechas, actividades, notas) se conservan; solo se quita el archivo de video, y el panel lo indicará como «archivado». Las jornadas en curso no se tocan.' }),
       u.err, u.stat, u.by, h('label', { className: 'vdlab' }, 'Hasta el día (inclusive; vacío = todos los pendientes) ', u.to),
-      h('div', { className: 'acts' }, u.go, u.stop), u.warn, u.note, u.fail, h('div', { className: 'acts' }, u.del), h('div', { className: 'acts' }, u.retry)); }
+      h('div', { className: 'acts' }, u.go, u.stop), u.warn, u.note, u.fail, h('div', { className: 'acts' }, u.del), h('div', { className: 'acts' }, u.retry), u.rest); }
   const el = vdEligible(), tot = el.reduce((a, x) => a + sizeOf(x), 0), pend = vdPending(), gone = arch.filter(a => a.removed_at);
   $('vids-sum').textContent = `Videos y espacio (${el.length} por archivar · ${fSize(tot)})`;
   u.err.textContent = archErr;
@@ -609,6 +668,10 @@ function renderVids() {
   const vt = vd.verified.reduce((a, x) => a + sizeOf(x), 0);
   u.del.classList.toggle('hidden', vd.busy || !vd.verified.length);
   u.del.textContent = `Eliminar de Supabase los ${vd.verified.length} ${vd.verified.length === 1 ? 'video verificado' : 'videos verificados'} (${fSize(vt)})`;
+  const rr = vdRestorable(), rb = rr.reduce((t, a) => t + (Number(a.video_size) || 0), 0);
+  u.rest.classList.toggle('hidden', !rr.length);
+  u.rtxt.textContent = `Archivados y eliminados de Supabase: ${rr.length} (${fSize(rb)}). Si necesita alguno de vuelta, elija la carpeta donde los descargó: el panel los reconoce por su nombre, comprueba el tamaño y los sube a su lugar original; la bitácora vuelve a mostrar «Reproducir evidencia». Al restaurar vuelven a ocupar espacio de Supabase.`;
+  u.rbtn.disabled = vd.busy || !!archErr || !window.showDirectoryPicker;
   u.retry.classList.toggle('hidden', vd.busy || !pend.length);
   u.retry.textContent = `Reintentar la eliminación de ${pend.length} ${pend.length === 1 ? 'video archivado' : 'videos archivados'} pendiente${pend.length === 1 ? '' : 's'}`;
   u.fail.replaceChildren(vd.failed.length ? h('table', { className: 'ns' }, h('thead', {}, h('tr', {}, ['Estudiante', 'Día', 'Problema'].map(t => h('th', { textContent: t })))),

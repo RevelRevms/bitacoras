@@ -132,3 +132,5 @@ button.danger{background:#b00020;border-color:#b00020;color:#fff}button.danger:h
 button:disabled{opacity:.55;cursor:not-allowed}
 .vdlab{display:block;font-weight:600;font-size:.88rem;margin:8px 0}.vdlab input{font-weight:400;display:block;margin-top:4px}
 #vids-body .acts{margin:8px 0;display:flex;gap:8px;flex-wrap:wrap}
+
+.vdrest{margin-top:18px;padding-top:6px;border-top:1px solid var(--rule)}.vdrest h3{font-size:.95rem;margin:10px 0 4px}
