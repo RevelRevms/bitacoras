@@ -3,7 +3,7 @@ const sb = supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY,
 const $ = id => document.getElementById(id);
 const TZ = 'America/Guatemala', MAX = 10 * 1024 * 1024;
 const SCREENS = ['s-login','s-profile','s-extra','s-home','s-form','s-done','s-staff'];
-let user, student, log, myLogs = [], myNotes = [], myRests = [], video = null, myArch = {}; // video = {blob, type, name} (solo para la vista previa local)
+let user, student, log, myLogs = [], myNotes = [], myRests = [], video = null, myArch = {}, myPArch = {}; // video = {blob, type, name} (solo para la vista previa local)
 
 const ERR = {
   JORNADA_YA_INICIADA: 'Ya inició una jornada hoy.',
@@ -75,6 +75,8 @@ async function route() {
   myRests = r4.error ? [] : dedupRests(r4.data || []);
   try { const ar = await sb.from('video_archive').select('log_id,removed_at').limit(2000);   // videos archivados (migracion_v8): ya no están en el servidor
     myArch = Object.fromEntries((ar.error ? [] : ar.data || []).filter(a => a.removed_at).map(a => [a.log_id, true])); } catch { myArch = {}; }
+  try { const pr = await sb.from('photo_archive').select('log_id,removed_at').limit(2000);   // fotos de inicio archivadas (migracion_v10)
+    myPArch = Object.fromEntries((pr.error ? [] : pr.data || []).filter(a => a.removed_at).map(a => [a.log_id, true])); } catch { myPArch = {}; }
   setWho();
   showAvatars();
   if (log?.status === 'in_progress') {
@@ -239,7 +241,8 @@ function renderHist() {
     row('Supervisión', x.supervised == null ? '' : x.supervised ? 'Trabajó bajo supervisión del encargado' : 'Sin supervisión del encargado');
     if (x.has_incident) row('Incidente', `${x.incident_description} (${x.incident_reported ? 'Se informó' : 'No se informó'} al supervisor)`, 'bad');
     row('Tipo de práctica', PROG[x.program]);
-    if (x.start_photo_path) body.append(el('dt', { textContent: 'Foto de inicio' }), el('dd', {}, el('button', { type: 'button', className: 'sec',
+    if (x.start_photo_path && myPArch[x.id]) row('Foto de inicio', 'Archivada por la institución; ya no se puede ver desde aquí.');
+    else if (x.start_photo_path) body.append(el('dt', { textContent: 'Foto de inicio' }), el('dd', {}, el('button', { type: 'button', className: 'sec',
       textContent: 'Ver foto de inicio', onclick: () => viewPhoto(x.start_photo_path, 'Foto de inicio') })));
     const un = x.status === 'unclosed';
     if (un) { row('Estado', 'Jornada no concluida: la cerró el administrador', 'bad'); row('Motivo', x.admin_note, 'bad'); }
