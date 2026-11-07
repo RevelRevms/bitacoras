@@ -179,7 +179,9 @@ function focusStudent(id) {
   if (d) { d.open = true; d.scrollIntoView?.({ behavior: 'smooth', block: 'start' }); }
 }
 
-let vday = '';   // día consultado ('' = hoy)
+let vday = '', resetLogs = false;   // día consultado ('' = hoy)
+// Al cambiar de día se cierran las tarjetas y bitácoras abiertas antes; el estudiante se vuelve a abrir al tocarlo y solo trae abierta la del día elegido.
+const setDay = v => { vday = v; resetLogs = true; render(); };
 const viewDay = () => vday || todayGT();
 function render() {
   const today = todayGT(), D = viewDay(), isT = D === today, byId = Object.fromEntries(students.map(s => [s.id, s]));
@@ -206,13 +208,13 @@ function render() {
     onclick: () => { kf = kf === key ? '' : key; render(); } }, h('b', { textContent: v }), h('span', { textContent: t }))));
 
   const dIn = h('input', { type: 'date', id: 'dsel', value: D, max: today, ariaLabel: 'Día que desea ver',
-    onchange: e => { const v = e.target.value; vday = !v || v >= today ? '' : v; render(); } });
+    onchange: e => { const v = e.target.value; setDay(!v || v >= today ? '' : v); } });
   $('daybar').replaceChildren(h('div', { className: 'dlab' }, h('b', { textContent: isT ? 'Hoy' : 'Día consultado' }), h('span', { textContent: fD(D) })),
     h('div', { className: 'dctl' },
-      h('button', { type: 'button', className: 'sec', ariaLabel: 'Día anterior', textContent: '‹', onclick: () => { vday = shiftDay(D, -1); render(); } }),
+      h('button', { type: 'button', className: 'sec', ariaLabel: 'Día anterior', textContent: '‹', onclick: () => setDay(shiftDay(D, -1)) }),
       dIn,
-      h('button', { type: 'button', className: 'sec', ariaLabel: 'Día siguiente', textContent: '›', disabled: isT, onclick: () => { const n = shiftDay(D, 1); vday = n >= today ? '' : n; render(); } }),
-      isT ? '' : h('button', { type: 'button', textContent: 'Volver a hoy', onclick: () => { vday = ''; render(); } })));
+      h('button', { type: 'button', className: 'sec', ariaLabel: 'Día siguiente', textContent: '›', disabled: isT, onclick: () => { const n = shiftDay(D, 1); setDay(n >= today ? '' : n); } }),
+      isT ? '' : h('button', { type: 'button', textContent: 'Volver a hoy', onclick: () => setDay('') })));
 
   renderPending(today, byId);
   renderRest(today);
@@ -222,7 +224,7 @@ function render() {
   const cnt = days.map(d => logs.filter(x => x.practice_date === d).length), mx = Math.max(1, ...cnt);
   $('c-days').replaceChildren(h('div', { className: 'cols' }, days.map((d, i) =>
     h('button', { type: 'button', className: 'col' + (d === today ? ' now' : '') + (d === D ? ' pick' : ''), title: fD(d) + ': ' + cnt[i], ariaLabel: fD(d) + ': ' + cnt[i] + (cnt[i] === 1 ? ' bitácora' : ' bitácoras'), ariaPressed: String(d === D),
-      onclick: () => { vday = d >= today ? '' : d; render(); } }, String(cnt[i]), h('i', { style: `height:${cnt[i] / mx * 90}px` }), d.slice(8)))));
+      onclick: () => setDay(d >= today ? '' : d) }, String(cnt[i]), h('i', { style: `height:${cnt[i] / mx * 90}px` }), d.slice(8)))));
   const gr = {}; logs.forEach(x => { const g = byId[x.student_id]?.grade || '?'; gr[g] = (gr[g] || 0) + 1; });
   const gm = Math.max(1, ...Object.values(gr));
   $('c-grade').replaceChildren(...Object.entries(gr).map(([g, n]) =>
@@ -235,7 +237,7 @@ function render() {
   const pf = $('pg').value, af = $('ac').value;
   const list = students.filter(s => (!sel.value || s.grade === sel.value) && (!pf || (pf === 'none' ? !s.program : s.program === pf)) && (!af || (af === 'on') === s.active) && (!kf || FILT[kf](s)) &&
     (`${s.full_name} ${s.practice_place} ${s.institution || ''} ${s.supervisor_name || ''} ${s.supervisor_contact || ''}`).toLowerCase().includes(q));
-  const openIds = new Set([...document.querySelectorAll('#list details[open]')].map(d => d.id));   // conserva lo expandido
+  const openIds = new Set([...document.querySelectorAll('#list details[open]')].filter(d => !(resetLogs && (d.id.startsWith('log-') || d.id.startsWith('stu-')))).map(d => d.id)); resetLogs = false;   // conserva lo expandido
   const note = kf ? h('div', { className: 'fnote' }, `Filtro: ${NAMES[kf]}. ${list.length} ${list.length === 1 ? 'estudiante' : 'estudiantes'}.`,
     h('button', { type: 'button', className: 'sec', textContent: 'Quitar filtro', onclick: () => { kf = ''; render(); } })) : '';
   $('list').replaceChildren(note, ...(list.length ? list.map(studentRow) : [h('p', { className: 'empty', textContent: 'Ningún estudiante coincide con los filtros.' })]));
