@@ -16,6 +16,7 @@ body{margin:0;font:400 .97rem/1.5 var(--body);background:var(--paper);color:var(
 .top{background:var(--ink);color:#fff;padding:16px var(--gut) 12px;border-bottom:4px solid var(--hl)}
 .top h1{margin:0 auto;max-width:1180px;font:700 2rem/1 var(--head);display:flex;flex-direction:column}
 .top h1 span{font:500 1.05rem/1.2 var(--head);color:#b9c9e6;letter-spacing:.04em;margin-top:2px}
+.top{position:relative}.gomos{position:absolute;right:var(--gut);top:16px;display:inline-flex;align-items:center;min-height:40px;padding:6px 14px;border:2px solid var(--hl);border-radius:4px;color:var(--hl);font-weight:700;font-size:.92rem;text-decoration:none}.gomos:hover{background:var(--hl);color:var(--ink)}
 .top .sub{max-width:1180px;margin:8px auto 0;color:#b9c9e6;font-size:.85rem}.top .sub:empty{display:none}
 main{max-width:1180px;margin:0 auto;padding:0 var(--gut) 56px;background:var(--paper)}
 h2{font:700 1.3rem/1.15 var(--head);margin:0 0 8px}

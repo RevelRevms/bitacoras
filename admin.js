@@ -64,6 +64,7 @@ async function start() {
   if (role !== 'admin' && !(v4 && role === 'supervisor')) { $('msg').textContent = 'Esta cuenta no tiene permisos de administrador ni de supervisor.'; return show(true, false); }
   if (r.data.active === false) { $('msg').textContent = 'Su cuenta de personal está inactiva. Hable con el administrador.'; return show(true, false); }
   me = { id: session.user.id, role, name: r.data.full_name || '' };
+  $('go-mos').classList.toggle('hidden', role !== 'admin');   // el mosaico es solo del administrador
   $('me').textContent = v4 ? `Sesión: ${me.name || 'sin nombre'} · ${role === 'admin' ? 'Administrador' : 'Supervisor'}` : '';
   $('msg').textContent = ''; show(false, true); load();
 }

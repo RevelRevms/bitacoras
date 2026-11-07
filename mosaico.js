@@ -40,7 +40,7 @@ async function start() {
   if (!session) return gate();
   let r = await sb.from('user_roles').select('role,active').eq('user_id', session.user.id).maybeSingle(), legacy = false;
   if (r.error) { legacy = true; r = await sb.from('user_roles').select('role').eq('user_id', session.user.id).maybeSingle(); }   // base sin migracion_v4
-  if (!['admin', 'supervisor'].includes(r.data?.role) || (legacy && r.data.role !== 'admin')) return gate('Esta cuenta no tiene permisos de administrador ni de supervisor.');
+  if (r.data?.role !== 'admin') return gate('El mosaico de videos es solo para el administrador.');
   if (r.data.active === false) return gate('Su cuenta de personal está inactiva. Hable con el administrador.');
   show(false, true); ready = true;
   const s = await sb.from('students').select('id,full_name,grade,practice_place,institution,program,avatar_path');
@@ -152,4 +152,6 @@ $('login').onsubmit = async e => { e.preventDefault();
   const { error } = await sb.auth.signInWithPassword({ email: $('em').value, password: $('pw').value });
   if (error) return $('msg').textContent = 'Credenciales incorrectas.'; start(); };
 $('out').onclick = async () => { await sb.auth.signOut(); gate(); };
+if (typeof matchMedia === 'function') { const mq = matchMedia('(min-width:900px)'), sync = () => { if (mq.matches) $('opts').open = true; };   // en pantalla ancha los filtros siempre visibles
+  sync(); mq.addEventListener?.('change', sync); }
 start();
