@@ -301,8 +301,11 @@ $('f-extra').onsubmit = async e => { e.preventDefault(); msg('');
   } catch (err) { btn.disabled = false; return fail(err); }
   btn.disabled = false; xAv = null; route(); };
 
-const setWho = () => { $('who').textContent = $('who2').textContent = `${student.full_name} · ${PROG[student.program] || 'Tipo sin definir'} · ${student.grade} ${student.section}` +
-  (student.institution ? ` · ${student.institution}` : '') + ` · ${student.practice_place}` + (student.supervisor_name ? ` · Encargado: ${student.supervisor_name}` : ''); };
+const setWho = () => { [$('who'), $('who2')].forEach(w => { w.replaceChildren(el('b', { textContent: student.full_name }),
+  el('span', { textContent: `${PROG[student.program] || 'Tipo sin definir'} · ${student.grade} ${student.section}` }),
+  ...(student.institution ? [el('span', { textContent: student.institution })] : []),
+  el('span', { textContent: student.practice_place }),
+  ...(student.supervisor_name ? [el('span', { textContent: `Encargado: ${student.supervisor_name}` })] : [])); }); };
 // Encargado de la práctica (quien está a cargo del estudiante en la empresa): el estudiante solo puede
 // COMPLETAR lo que dejó vacío; lo ya registrado queda de solo lectura (lo corrige el personal).
 function renderSup() {
@@ -401,7 +404,7 @@ $('b-start').onclick = async () => {
     $('sp-info').textContent = 'Tome una foto en su lugar de práctica para poder iniciar la jornada.';
     route();
   } catch (err) { fail(err); }
-  finally { btn.textContent = 'INICIAR JORNADA'; updateStart(); } };
+  finally { btn.textContent = 'Iniciar jornada'; updateStart(); } };
 
 document.querySelectorAll('input[name=inc]').forEach(r => r.onchange = () =>
   $('inc-box').classList.toggle('hidden', radio('inc') !== '1'));
@@ -509,7 +512,7 @@ $('f-log').onsubmit = async e => { e.preventDefault(); msg('');
     if (error) throw error;
     log = data; myLogs = [data, ...myLogs.filter(x => x.id !== data.id)]; video = null; showReceipt();
   } catch (err) { fail(err); }
-  finally { btn.disabled = false; btn.textContent = 'FINALIZAR Y ENVIAR BITÁCORA'; }
+  finally { btn.disabled = false; btn.textContent = 'Finalizar y enviar bitácora'; }
 };
 
 sb.auth.onAuthStateChange((ev) => { if (ev === 'SIGNED_OUT') route(); });

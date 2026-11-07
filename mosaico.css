@@ -28,3 +28,7 @@ body.contain .tile video{object-fit:contain}
 .big .t{display:flex;gap:10px;align-items:center;padding:8px 12px;background:#111}.big .t span{flex:1}
 .big video{flex:1;min-height:0;width:100%;background:#000}
 body.noscroll{overflow:hidden}
+
+/* avatar en el pie del cuadro */
+.tile .cap.wav{padding-left:38px}.tile .cap .av{position:absolute;left:6px;bottom:6px;width:26px;height:26px;border-radius:50%;background:#333 center/cover no-repeat;border:1px solid #fff8}
+#grid.sm .cap.wav{padding-left:30px}#grid.sm .cap .av{width:20px;height:20px;left:5px;bottom:4px}
