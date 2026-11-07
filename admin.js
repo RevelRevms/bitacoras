@@ -34,6 +34,8 @@ const missesOf = (id, today) => { const from = shiftDay(today, -REINC_DIAS);
 
 const ERRS = {
   NO_AUTORIZADO: 'Esta cuenta no tiene permiso para esta acción (o está inactiva).',
+  SIN_CUENTAS: 'Seleccione al menos una cuenta.',
+  DEMASIADAS_CUENTAS: 'Seleccione como máximo 200 cuentas a la vez.',
   CORREO_YA_EXISTE: 'Ya existe una cuenta con ese correo.',
   CORREO_INVALIDO: 'El correo no es válido.',
   NOMBRE_INVALIDO: 'El nombre debe tener entre 3 y 150 caracteres.',
@@ -69,7 +71,7 @@ async function start() {
   $('msg').textContent = ''; show(false, true); load();
 }
 async function load() {
-  const [s, l, n, rd, sd, au, ac, va, pa, pi] = await Promise.all([
+  const [s, l, n, rd, sd, au, ac, va, pa, pi, us] = await Promise.all([
     sb.from('students').select('*').order('full_name'),
     sb.from('daily_logs').select('*').order('practice_date', { ascending: false }).limit(5000),
     sb.from('admin_notes').select('*').order('created_at', { ascending: false }).limit(2000),
@@ -79,12 +81,15 @@ async function load() {
     v4 && me?.role === 'admin' ? sb.rpc('admin_list_accounts') : Promise.resolve({ data: [] }),
     sb.from('video_archive').select('*').limit(5000),
     sb.from('photo_archive').select('*').limit(5000),
-    v4 && me?.role === 'admin' ? sb.rpc('admin_inactive_photos') : Promise.resolve({ data: [] })]);
+    v4 && me?.role === 'admin' ? sb.rpc('admin_inactive_photos') : Promise.resolve({ data: [] }),
+    v4 && me?.role === 'admin' ? sb.rpc('admin_accounts_usage') : Promise.resolve({ data: [] })]);
   arch = va.error ? [] : va.data || []; archMap = Object.fromEntries(arch.map(a => [a.log_id, a]));
   parch = pa.error ? [] : pa.data || []; pArchMap = Object.fromEntries(parch.map(a => [a.log_id, a])); pinfo = pi.error ? [] : pi.data || [];
   { const pe = pa.error || pi.error; pErr = pe ? (/photo_archive|admin_inactive_photos|42P01|PGRST205|PGRST202|schema cache|Could not find/.test((pe.message || '') + (pe.code || '')) ? 'Falta ejecutar migracion_v10.sql en Supabase: hasta entonces las fotos de inicio no se archivan.' : errText(pe)) : ''; }
   archErr = va.error ? (/video_archive|42P01|PGRST205|schema cache/.test(va.error.message || va.error.code || '') ? 'Falta ejecutar migracion_v8.sql en Supabase.' : errText(va.error)) : '';
   staffMap = Object.fromEntries((sd.error ? [] : sd.data || []).map(x => [x.user_id, x])); audit = au.error ? [] : au.data || [];
+  usage = us.error ? null : Object.fromEntries((us.data || []).map(x => [x.user_id, x]));   // null = falta migracion_v11.sql
+  acSel.clear();
   accts = ac.error ? [] : ac.data || []; acErr = ac.error ? (/Could not find the function|PGRST202/.test(ac.error.message || '') ? 'Falta ejecutar migracion_v6.sql en Supabase.' : errText(ac.error)) : '';
   if (s.error || l.error) return $('msg').textContent = (s.error || l.error).message;
   students = s.data; logs = l.data; notes = n.error ? [] : n.data;
@@ -505,7 +510,13 @@ function renderNewStu() {
 // ---- Cuentas: todas las cuentas de acceso y su situación (solo administrador) ----
 // Une auth.users con students y user_roles (función admin_list_accounts, migracion_v6.sql).
 const TIPOS = { sin_perfil: 'Sin perfil', estudiante: 'Estudiante', supervisor: 'Supervisor', admin: 'Administrador', ex_personal: 'Ex personal' };
-let acBuilt = false, acUi = {}, acFilter = 'sin_perfil', acQ = '';
+let acBuilt = false, acUi = {}, acFilter = 'sin_perfil', acQ = '', usage = null;
+const acSel = new Set();
+// Una cuenta se puede eliminar solo si no es administrador, no es la propia y no tiene historial (bitácoras, notas o registros hechos).
+const whyKeep = a => { if (a.tipo === 'admin') return 'Administrador'; if (a.user_id === me?.id) return 'Su cuenta'; const u = usage?.[a.user_id]; if (!u) return '—';   // sin datos de uso no se puede verificar: no se ofrece eliminar
+  const p = []; if (u.bitacoras) p.push(`${u.bitacoras} ${u.bitacoras === 1 ? 'bitácora' : 'bitácoras'}`); if (u.notas) p.push(`${u.notas} ${u.notas === 1 ? 'nota' : 'notas'}`); if (u.registros) p.push(`registró ${u.registros}`);
+  return p.length ? 'Tiene ' + p.join(', ') + ': inactívela' : ''; };
+const canDelete = a => usage !== null && whyKeep(a) === '';
 const norm = t => String(t || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
 function renderAccts() {
   const card = $('accts'); card.classList.toggle('hidden', !(v4 && me?.role === 'admin'));
@@ -513,8 +524,8 @@ function renderAccts() {
   const u = acUi;
   if (!acBuilt) { acBuilt = true;
     u.chips = h('div', { className: 'chips' }); u.q = h('input', { type: 'search', placeholder: 'Buscar por nombre o correo', oninput: () => { acQ = u.q.value; renderAccts(); } });
-    u.list = h('div', { className: 'tbl' }); u.note = h('p', { className: 'sub' }); u.err = h('div', { className: 'err' });
-    $('accts-body').replaceChildren(h('p', { className: 'sub', textContent: 'Todas las cuentas de acceso. «Sin perfil» son cuentas creadas que aún no han entrado a llenar su perfil: todavía no aparecen en la lista de estudiantes.' }), u.err, u.chips, u.q, u.note, u.list); }
+    u.list = h('div', { className: 'tbl' }); u.note = h('p', { className: 'sub' }); u.err = h('div', { className: 'err' }); u.tools = h('div', { className: 'actools' });
+    $('accts-body').replaceChildren(h('p', { className: 'sub', textContent: 'Todas las cuentas de acceso. «Sin perfil» son cuentas creadas que aún no han entrado a llenar su perfil: todavía no aparecen en la lista de estudiantes.' }), u.err, u.chips, u.q, u.tools, u.note, u.list); }
   const cnt = k => accts.filter(a => a.tipo === k).length;
   $('accts-sum').textContent = `Cuentas (${accts.length}${cnt('sin_perfil') ? ` · ${cnt('sin_perfil')} sin perfil` : ''})`;
   u.err.textContent = acErr;
@@ -523,10 +534,40 @@ function renderAccts() {
   const q = norm(acQ).trim();
   const rows = accts.filter(a => (acFilter === 'todas' || a.tipo === acFilter) && (!q || norm(a.nombre + ' ' + a.correo).includes(q)));
   u.note.textContent = rows.length ? `${rows.length} ${rows.length === 1 ? 'cuenta' : 'cuentas'}` : (acErr ? '' : 'No hay cuentas con ese filtro.');
-  u.list.replaceChildren(rows.length ? h('table', { className: 'ns' }, h('thead', {}, h('tr', {}, ['Nombre', 'Correo', 'Situación', 'Creada', 'Último ingreso'].map(t => h('th', { textContent: t })))),
-    h('tbody', {}, rows.map(a => h('tr', { className: a.activo ? '' : 'skip' }, h('td', { textContent: a.nombre || '—' }), h('td', { textContent: a.correo || '—' }),
+  const del = rows.filter(canDelete);
+  [...acSel].forEach(id => { if (!accts.some(x => x.user_id === id && canDelete(x))) acSel.delete(id); });
+  const nSel = acSel.size, allOn = del.length > 0 && del.every(x => acSel.has(x.user_id));
+  u.tools.replaceChildren(
+    usage === null && !acErr ? h('p', { className: 'sub', textContent: 'Para eliminar cuentas falta ejecutar migracion_v11.sql en Supabase.' })
+      : h('p', { className: 'sub', textContent: 'Solo se pueden eliminar cuentas sin historial (por ejemplo, creadas por error o duplicadas). Las que ya tienen bitácoras o notas se inactivan.' }),
+    usage !== null ? h('div', { className: 'acts' },
+      h('button', { type: 'button', className: 'sec', textContent: allOn ? 'Quitar selección' : `Seleccionar eliminables (${del.length})`, disabled: !del.length,
+        onclick: () => { if (allOn) del.forEach(x => acSel.delete(x.user_id)); else del.forEach(x => acSel.add(x.user_id)); renderAccts(); } }),
+      h('button', { type: 'button', className: 'danger', textContent: nSel ? `Eliminar seleccionadas (${nSel})` : 'Eliminar seleccionadas', disabled: !nSel, onclick: deleteSelected })) : '');
+  u.list.replaceChildren(rows.length ? h('table', { className: 'ns' }, h('thead', {}, h('tr', {}, [usage !== null ? '' : null, 'Nombre', 'Correo', 'Situación', 'Creada', 'Último ingreso', usage !== null ? 'Historial' : null].filter(t => t !== null).map(t => h('th', { textContent: t })))),
+    h('tbody', {}, rows.map(a => h('tr', { className: a.activo ? '' : 'skip' },
+      ...(usage !== null ? [h('td', { className: 'ck' }, canDelete(a) ? h('input', { type: 'checkbox', checked: acSel.has(a.user_id), ariaLabel: 'Seleccionar a ' + (a.nombre || a.correo),
+        onchange: e => { if (e.target.checked) acSel.add(a.user_id); else acSel.delete(a.user_id); renderAccts(); } }) : '')] : []),
+      h('td', { textContent: a.nombre || '—' }), h('td', { textContent: a.correo || '—' }),
       h('td', { textContent: TIPOS[a.tipo] + (a.activo ? '' : ' (inactivo)') }), h('td', { textContent: fDT(a.creada) }),
-      h('td', { textContent: a.ultimo_ingreso ? fDT(a.ultimo_ingreso) : 'Nunca ha entrado' }))))) : '');
+      h('td', { textContent: a.ultimo_ingreso ? fDT(a.ultimo_ingreso) : 'Nunca ha entrado' }),
+      ...(usage !== null ? [h('td', { className: canDelete(a) ? '' : 'keep', textContent: canDelete(a) ? 'Sin historial' : whyKeep(a) })] : []))))) : '');
+}
+async function deleteSelected() {
+  const ids = [...acSel], list = accts.filter(x => acSel.has(x.user_id));
+  if (!ids.length) return;
+  const names = list.slice(0, 8).map(x => '• ' + (x.nombre || x.correo)).join('\n') + (list.length > 8 ? `\n…y ${list.length - 8} más` : '');
+  if (!confirm(`Se eliminarán ${list.length} ${list.length === 1 ? 'cuenta' : 'cuentas'} de forma permanente:\n\n${names}\n\nNo se puede deshacer.`)) return;
+  const word = prompt('Para confirmar, escriba ELIMINAR'); if (word === null) return;
+  if (word.trim().toUpperCase() !== 'ELIMINAR') return alert('No se eliminó nada: la palabra no coincide.');
+  const { data, error } = await sb.rpc('admin_delete_accounts', { p_ids: ids });
+  if (error) return alert(/Could not find the function|PGRST202/.test(error.message || '') ? 'Falta ejecutar migracion_v11.sql en Supabase.' : errText(error));
+  const ok = (data || []).filter(x => x.eliminado), no = (data || []).filter(x => !x.eliminado);
+  const av = ok.map(x => x.avatar_path).filter(Boolean);
+  if (av.length) { try { await sb.storage.from('practice-photos').remove(av); } catch (e) { /* el avatar huérfano no afecta nada */ } }
+  await load();
+  alert((ok.length ? `Se eliminaron ${ok.length} ${ok.length === 1 ? 'cuenta' : 'cuentas'}.` : 'No se eliminó ninguna cuenta.')
+    + (no.length ? `\n\nNo se eliminaron:\n${no.map(x => `• ${x.nombre || x.correo || 'cuenta'}: ${x.motivo}`).join('\n')}` : ''));
 }
 
 // ---- Videos, fotos y espacio: descargar a una carpeta, eliminar de Supabase y restaurar (solo administrador) ----
@@ -847,7 +888,7 @@ function logRow(x, s) {
 $('login').onsubmit = async e => { e.preventDefault();
   const { error } = await sb.auth.signInWithPassword({ email: $('em').value, password: $('pw').value });
   if (error) return $('msg').textContent = 'Credenciales incorrectas.'; start(); };
-$('out').onclick = async () => { await sb.auth.signOut(); $('msg').textContent = ''; me = null; staffMap = {}; audit = []; accts = []; acErr = ''; acBuilt = false; arch = []; archMap = {}; archErr = ''; vdBuilt = false; vdTo = ''; vd = { verified: [], failed: [], busy: false, ctrl: null, note: '', skipped: 0 }; acFilter = 'sin_perfil'; acQ = ''; lastCreated = null; staffBuilt = false; clearNewStu(); nsBuilt = false; show(true, false); };
+$('out').onclick = async () => { await sb.auth.signOut(); $('msg').textContent = ''; me = null; usage = null; acSel.clear(); staffMap = {}; audit = []; accts = []; acErr = ''; acBuilt = false; arch = []; archMap = {}; archErr = ''; vdBuilt = false; vdTo = ''; vd = { verified: [], failed: [], busy: false, ctrl: null, note: '', skipped: 0 }; acFilter = 'sin_perfil'; acQ = ''; lastCreated = null; staffBuilt = false; clearNewStu(); nsBuilt = false; show(true, false); };
 $('re').onclick = load;
 $('q').oninput = $('g').onchange = $('pg').onchange = $('ac').onchange = render;
 start();
