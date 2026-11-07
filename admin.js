@@ -4,7 +4,7 @@ const $ = id => document.getElementById(id), TZ = 'America/Guatemala';
 const REINC_N = 3, REINC_DIAS = 30;
 const PROG = { practica: 'Práctica Supervisada', prepractica: 'Prepráctica' };
 const progName = p => PROG[p] || 'Sin definir';
-let students = [], logs = [], notes = [], rests = [], kf = '', avs = {};
+let students = [], logs = [], notes = [], rests = [], kf = 'active', avs = {};   // el panel abre con «Estudiantes activos» ya pulsado
 let arch = [], archMap = {}, parch = [], pArchMap = {}, pinfo = [], archErr = '', pErr = '', vdBuilt = false, vdUi = {}, vd = { verified: [], failed: [], busy: false, ctrl: null, note: '', skipped: 0 }, vdTo = '';
 let me = null, staffMap = {}, audit = [], accts = [], acErr = '', v4 = true, staffBuilt = false, staffUi = {}, lastCreated = null;   // v4 = ¿ya se ejecutó migracion_v4.sql?   // kf = filtro activo de los indicadores superiores
 const h = (t, p = {}, ...k) => { const e = document.createElement(t);
@@ -888,7 +888,7 @@ function logRow(x, s) {
 $('login').onsubmit = async e => { e.preventDefault();
   const { error } = await sb.auth.signInWithPassword({ email: $('em').value, password: $('pw').value });
   if (error) return $('msg').textContent = 'Credenciales incorrectas.'; start(); };
-$('out').onclick = async () => { await sb.auth.signOut(); $('msg').textContent = ''; me = null; usage = null; acSel.clear(); staffMap = {}; audit = []; accts = []; acErr = ''; acBuilt = false; arch = []; archMap = {}; archErr = ''; vdBuilt = false; vdTo = ''; vd = { verified: [], failed: [], busy: false, ctrl: null, note: '', skipped: 0 }; acFilter = 'sin_perfil'; acQ = ''; lastCreated = null; staffBuilt = false; clearNewStu(); nsBuilt = false; show(true, false); };
+$('out').onclick = async () => { await sb.auth.signOut(); $('msg').textContent = ''; me = null; kf = 'active'; usage = null; acSel.clear(); staffMap = {}; audit = []; accts = []; acErr = ''; acBuilt = false; arch = []; archMap = {}; archErr = ''; vdBuilt = false; vdTo = ''; vd = { verified: [], failed: [], busy: false, ctrl: null, note: '', skipped: 0 }; acFilter = 'sin_perfil'; acQ = ''; lastCreated = null; staffBuilt = false; clearNewStu(); nsBuilt = false; show(true, false); };
 $('re').onclick = load;
 $('q').oninput = $('g').onchange = $('pg').onchange = $('ac').onchange = render;
 start();
