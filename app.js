@@ -50,14 +50,17 @@ const todayGT = () => new Intl.DateTimeFormat('en-CA', { timeZone: TZ }).format(
 const val = id => $(id).value.trim();
 const radio = n => document.querySelector(`input[name=${n}]:checked`)?.value;
 
+// Título de la cabecera según el tipo de práctica del estudiante (sin sesión o sin tipo: práctica supervisada)
+const TTL = { prepractica: 'prepráctica' };
+function setTitle(p) { const t = 'de ' + (TTL[p] || 'práctica supervisada'); $('ttl-sub').textContent = t; document.title = 'Bitácora ' + t; }
 async function route() {
   msg('');
   const { data: { session } } = await sb.auth.getSession();
   $('b-out').classList.toggle('hidden', !session);
-  if (!session) { user = null; return show('s-login'); }
+  if (!session) { user = null; setTitle(); return show('s-login'); }
   user = session.user;
   const rr = await sb.from('user_roles').select('role').eq('user_id', user.id).maybeSingle();   // cuentas del personal no son estudiantes
-  if (!rr.error && ['admin', 'supervisor'].includes(rr.data?.role)) return show('s-staff');
+  if (!rr.error && ['admin', 'supervisor'].includes(rr.data?.role)) { setTitle(); return show('s-staff'); }
   const r1 = await sb.from('students').select('*').eq('id', user.id).maybeSingle();
   if (r1.error) return fail(r1.error);
   student = r1.data;
@@ -77,7 +80,7 @@ async function route() {
     myArch = Object.fromEntries((ar.error ? [] : ar.data || []).filter(a => a.removed_at).map(a => [a.log_id, true])); } catch { myArch = {}; }
   try { const pr = await sb.from('photo_archive').select('log_id,removed_at').limit(2000);   // fotos de inicio archivadas (migracion_v10)
     myPArch = Object.fromEntries((pr.error ? [] : pr.data || []).filter(a => a.removed_at).map(a => [a.log_id, true])); } catch { myPArch = {}; }
-  setWho();
+  setWho(); setTitle(student.program);
   showAvatars();
   if (log?.status === 'in_progress') {
     const late = log.practice_date < todayGT();
@@ -332,7 +335,7 @@ $('f-sup').onsubmit = async e => { e.preventDefault(); msg(''); $('sup-ok').text
   try {
     const { data, error } = await sb.rpc('update_my_supervisor', { p_name: $('sup-n').value, p_contact: $('sup-c').value });
     if (error) throw error;
-    student = data; setWho(); renderSup(); $('sup-ok').textContent = 'Datos del encargado guardados.';
+    student = data; setWho(); setTitle(student.program); renderSup(); $('sup-ok').textContent = 'Datos del encargado guardados.';
   } catch (err) { fail(err); } finally { b.disabled = false; } };
 
 // Cambiar la foto de perfil cuando quiera
