@@ -147,12 +147,25 @@ async function uploadAvatar(blob) {
   if (up.error) throw up.error; return path;
 }
 let imgPrev;
+// Visor a pantalla completa para la foto de inicio y el video (mismo contenedor).
+function openViewer(kind, url, title) {
+  imgPrev = document.activeElement; $('img-title').textContent = title || '';
+  const im = $('img-big'), vd = $('vid-big');
+  im.classList.toggle('hidden', kind !== 'img'); vd.classList.toggle('hidden', kind !== 'vid');
+  if (kind === 'img') { im.src = url; im.alt = title || 'Foto'; } else { vd.src = url; }
+  $('img-modal').classList.remove('hidden'); document.body.classList.add('noscroll'); $('img-close').focus();
+}
 async function viewPhoto(path, title) {
   const u = await photoUrl(path); if (!u) return msg('No se pudo cargar la foto.');
-  imgPrev = document.activeElement; $('img-big').src = u; $('img-big').alt = title || 'Foto';
-  $('img-modal').classList.remove('hidden'); $('img-close').focus();
+  openViewer('img', u, title);
 }
-const closeImg = () => { $('img-modal').classList.add('hidden'); $('img-big').removeAttribute('src'); imgPrev?.focus?.(); };
+async function viewVideo(path, title) {
+  const r = await sb.storage.from('practice-videos').createSignedUrl(path, 300);
+  if (r.error || !r.data) return msg('No se pudo cargar el video.');
+  openViewer('vid', r.data.signedUrl, title || 'Video de evidencia');
+}
+const closeImg = () => { $('img-modal').classList.add('hidden'); document.body.classList.remove('noscroll');
+  $('img-big').removeAttribute('src'); const v = $('vid-big'); try { v.pause(); } catch (e) {} v.removeAttribute('src'); v.load?.(); imgPrev?.focus?.(); };
 $('img-close').onclick = closeImg; $('img-modal').onclick = e => { if (e.target === $('img-modal')) closeImg(); };
 document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('img-modal').classList.contains('hidden')) closeImg(); });
 
@@ -171,6 +184,7 @@ const syncCareer = () => { const g = $('p-gr').value, c = $('p-car').value;
   [...$('p-gr').options].forEach(o => o.disabled = o.value === 'Sexto' && c === 'Bachillerato'); };
 $('p-gr').onchange = $('p-car').onchange = syncCareer;
 
+$('sp-prev').onclick = () => $('sp-prev').src && openViewer('img', $('sp-prev').src, 'Foto de inicio de jornada');
 // ---- Evidencias de la jornada abierta ----
 function renderEvidence() {
   const p = $('ev-photo'); p.replaceChildren();
@@ -184,9 +198,7 @@ function renderEvidence() {
   $('v-state').textContent = has ? `Video guardado${log.video_size ? ' (' + (log.video_size / 1048576).toFixed(1) + ' MB)' : ''}. Puede reemplazarlo hasta cerrar la jornada.` : '';
   if (!video) { $('v-prev').classList.add('hidden'); $('v-info').textContent = ''; }
 }
-$('v-view').onclick = async () => { const r = await sb.storage.from('practice-videos').createSignedUrl(log.video_path, 300);
-  if (r.error) return msg('No se pudo cargar el video.');
-  const p = $('v-prev'); p.src = r.data.signedUrl; p.classList.remove('hidden'); $('v-view').classList.add('hidden'); };
+$('v-view').onclick = () => viewVideo(log.video_path, 'Video guardado de hoy');
 const busy = (on, t) => { ['b-rec', 'v-file', 'b-send'].forEach(i => $(i).disabled = on); if (t != null) $('v-state').textContent = t; };
 // Sube el video y lo asocia a la jornada abierta AL INSTANTE (en cualquier momento de la jornada).
 async function saveVideo(blob, type, name) {
@@ -248,11 +260,8 @@ function renderHist() {
     if (un) { row('Estado', 'Jornada no concluida: la cerró el administrador', 'bad'); row('Motivo', x.admin_note, 'bad'); }
     if (x.closed_late) { row('Cierre tardío', 'Se cerró después del día de la práctica'); row('Motivo del retraso', x.late_reason); }
     if (x.video_path && myArch[x.id]) row('Video de evidencia', 'Archivado por la institución; ya no se puede ver desde aquí.');
-    else if (x.video_path) { const vb = el('div');
-      body.append(el('dt', { textContent: 'Video de evidencia' }), el('dd', {}, el('button', { type: 'button', className: 'sec', textContent: 'Ver mi video',
-        onclick: async () => { const r = await sb.storage.from('practice-videos').createSignedUrl(x.video_path, 300);
-          if (r.error) return vb.textContent = 'No se pudo cargar el video.';
-          vb.replaceChildren(el('video', { src: r.data.signedUrl, controls: true, playsInline: true })); } }), vb)); }
+    else if (x.video_path) body.append(el('dt', { textContent: 'Video de evidencia' }), el('dd', {}, el('button', { type: 'button', className: 'sec',
+      textContent: 'Ver mi video', onclick: () => viewVideo(x.video_path, 'Mi video · ' + fmtDate(x.practice_date)) })));
     const d = new Date(x.practice_date + 'T12:00:00');
     box.append(el('details', { className: 'hl' }, el('summary', {},
       el('div', { className: 'hd', textContent: d.toLocaleDateString('es-GT', { weekday: 'short', day: 'numeric', month: 'short' }) }),

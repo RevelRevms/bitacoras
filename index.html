@@ -2,7 +2,7 @@
 <html lang="es"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Bitácora de práctica supervisada</title>
-<link rel="stylesheet" href="styles.css?v=15"></head><body><header class="top"><h1>Bitácora<span>de práctica supervisada</span></h1></header><main class="sheet">
+<link rel="stylesheet" href="styles.css?v=16"></head><body><header class="top"><h1>Bitácora<span>de práctica supervisada</span></h1></header><main class="sheet">
 <div id="msg" class="err" role="alert"></div>
 
 <section id="s-login" class="card hidden"><h2 class="cover">Registre su jornada de hoy</h2><p class="info">Entre con el correo y la contraseña que le dio su administrador.</p><form id="f-login">
@@ -96,8 +96,8 @@
 <section id="hist" class="hidden"><h2>Mi historial de bitácoras</h2><div id="hist-list"></div></section>
 <button id="b-out" class="sec hidden">Cerrar sesión</button>
 </main>
-<div id="img-modal" class="modal hidden"><div class="mbox imgbox"><img id="img-big" alt="">
-<button type="button" id="img-close" class="sec">Cerrar</button></div></div>
+<div id="img-modal" class="modal full hidden" role="dialog" aria-modal="true" aria-labelledby="img-title"><div class="mbox imgbox"><div class="fbar"><span id="img-title"></span><button type="button" id="img-close" class="sec">Cerrar</button></div>
+<img id="img-big" alt="" class="hidden"><video id="vid-big" class="hidden" controls playsinline></video></div></div>
 <div id="rec-modal" class="modal hidden"><div class="mbox">
 <p class="notice"><b>Antes de grabar:</b> no enfoque nada sensible que la empresa no permita ni a personas que no hayan dado su consentimiento previo.</p>
 <video id="rec-live" muted playsinline autoplay></video>
@@ -122,4 +122,4 @@
 <button type="button" id="pic-cancel" class="sec">Cancelar</button>
 </div></div></div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="supabase-config.js?v=8"></script><script src="app.js?v=18"></script></body></html>
+<script src="supabase-config.js?v=8"></script><script src="app.js?v=19"></script></body></html>

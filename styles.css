@@ -133,7 +133,16 @@ dl{margin:18px 0 0}dt{font-size:.85rem;color:var(--muted);margin-top:12px}dd{mar
 details.devs summary{cursor:pointer;min-height:44px;display:flex;align-items:center;font-weight:600;font-size:.92rem}
 .macts{position:sticky;bottom:-12px;background:#fff;margin-top:8px;padding:10px 0 4px;border-top:1px solid var(--rule);display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .macts button{margin:0;padding:10px 8px}.macts #rec-start,.macts #pic-shot{grid-column:1/-1;min-height:56px}
-.imgbox img{display:block;width:100%;max-height:72vh;max-height:72dvh;object-fit:contain;border-radius:4px;background:#000}
+.noscroll{overflow:hidden}
+.thumb{cursor:zoom-in}
+/* visor a pantalla completa: foto de inicio y video */
+.modal.full{background:#000;padding:0;align-items:stretch}
+.modal.full .mbox{max-width:none;width:100%;height:100vh;height:100dvh;max-height:none;padding:0;border:0;border-radius:0;background:#000;overflow:hidden}
+.fbar{flex:none;display:flex;align-items:center;gap:12px;padding:10px 14px;padding-top:max(10px,env(safe-area-inset-top));background:#0a1224;color:#e8efff}
+.fbar span{flex:1;min-width:0;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fbar button{width:auto;min-width:0;min-height:44px;margin:0;padding:8px 18px;background:var(--hl);border-color:var(--hl);box-shadow:none;color:var(--ink)}
+.modal.full img,.modal.full video{flex:1;min-height:0;width:100%;height:auto;max-height:none;margin:0;border-radius:0;object-fit:contain;background:#000;align-self:stretch}
+.modal.full .mbox video{width:100%;height:auto;align-self:stretch}
 @media (max-height:620px){.mbox video{height:26vh;height:26dvh}}
 
 /* ---------- 768 px: la hoja se centra sobre el escritorio ---------- */
@@ -147,7 +156,7 @@ details.devs summary{cursor:pointer;min-height:44px;display:flex;align-items:cen
   .opts{grid-template-columns:repeat(2,minmax(0,1fr))}
   button{width:auto;min-width:260px}.macts button{min-width:0;width:100%}button.small,#b-out{min-width:0}
   #b-start,#b-send{width:100%}
-  .modal{align-items:center;padding:24px}.mbox{border-radius:8px;max-height:calc(100dvh - 48px)}
+  .modal:not(.full){align-items:center;padding:24px}.mbox{border-radius:8px;max-height:calc(100dvh - 48px)}.modal.full .mbox{border-radius:0;max-height:none}
   .mbox video{height:46vh}
 }
 
