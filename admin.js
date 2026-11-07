@@ -179,28 +179,40 @@ function focusStudent(id) {
   if (d) { d.open = true; d.scrollIntoView?.({ behavior: 'smooth', block: 'start' }); }
 }
 
+let vday = '';   // día consultado ('' = hoy)
+const viewDay = () => vday || todayGT();
 function render() {
-  const today = todayGT(), byId = Object.fromEntries(students.map(s => [s.id, s]));
+  const today = todayGT(), D = viewDay(), isT = D === today, byId = Object.fromEntries(students.map(s => [s.id, s]));
   const mineOf = s => logs.filter(x => x.student_id === s.id);
-  const FILT = { active: s => s.active, today: s => mineOf(s).some(x => x.practice_date === today),
-    open: s => mineOf(s).some(x => x.status === 'in_progress' && x.practice_date === today),
-    done: s => mineOf(s).some(x => x.practice_date === today && x.status === 'submitted'),
+  const FILT = { active: s => s.active, today: s => mineOf(s).some(x => x.practice_date === D),
+    open: s => mineOf(s).some(x => x.status === 'in_progress' && x.practice_date === D),
+    done: s => mineOf(s).some(x => x.practice_date === D && x.status === 'submitted'),
     unc: s => mineOf(s).some(x => isStale(x, today)),
     rei: s => missesOf(s.id, today).length >= REINC_N,
     inc: s => mineOf(s).some(x => x.has_incident) };
-  const NAMES = { active: 'Estudiantes activos', today: 'Con bitácora hoy', open: 'Con jornada en curso hoy',
-    done: 'Con jornada finalizada hoy', unc: 'Con jornada sin cerrar',
+  const dl = isT ? 'hoy' : 'el ' + fD(D);
+  const NAMES = { active: 'Estudiantes activos', today: 'Con bitácora ' + dl, open: 'Con jornada en curso ' + dl,
+    done: 'Con jornada finalizada ' + dl, unc: 'Con jornada sin cerrar',
     rei: `Reincidentes (${REINC_N} o más sin cerrar a tiempo en ${REINC_DIAS} días)`, inc: 'Con incidentes' };
   const k = [['active', 'Estudiantes activos', students.filter(s => s.active).length],
-    ['today', 'Bitácoras de hoy', logs.filter(x => x.practice_date === today).length],
-    ['open', 'Jornadas en curso', logs.filter(x => x.status === 'in_progress' && x.practice_date === today).length],
-    ['done', 'Finalizadas hoy', logs.filter(x => x.practice_date === today && x.status === 'submitted').length],
+    ['today', isT ? 'Bitácoras de hoy' : 'Bitácoras del día', logs.filter(x => x.practice_date === D).length],
+    ['open', 'Jornadas en curso', logs.filter(x => x.status === 'in_progress' && x.practice_date === D).length],
+    ['done', isT ? 'Finalizadas hoy' : 'Finalizadas ese día', logs.filter(x => x.practice_date === D && x.status === 'submitted').length],
     ['unc', 'Sin cerrar', logs.filter(x => isStale(x, today)).length],
     ['rei', 'Reincidentes', students.filter(FILT.rei).length],
     ['inc', 'Incidentes (total)', logs.filter(x => x.has_incident).length]];
   $('kpis').replaceChildren(...k.map(([key, t, v]) => h('button', { type: 'button', title: 'Filtrar la lista de estudiantes',
     ariaPressed: String(kf === key), className: 'fig' + (kf === key ? ' sel' : '') + (['inc', 'unc', 'rei'].includes(key) && v ? ' alert' : ''),
     onclick: () => { kf = kf === key ? '' : key; render(); } }, h('b', { textContent: v }), h('span', { textContent: t }))));
+
+  const dIn = h('input', { type: 'date', id: 'dsel', value: D, max: today, ariaLabel: 'Día que desea ver',
+    onchange: e => { const v = e.target.value; vday = !v || v >= today ? '' : v; render(); } });
+  $('daybar').replaceChildren(h('div', { className: 'dlab' }, h('b', { textContent: isT ? 'Hoy' : 'Día consultado' }), h('span', { textContent: fD(D) })),
+    h('div', { className: 'dctl' },
+      h('button', { type: 'button', className: 'sec', ariaLabel: 'Día anterior', textContent: '‹', onclick: () => { vday = shiftDay(D, -1); render(); } }),
+      dIn,
+      h('button', { type: 'button', className: 'sec', ariaLabel: 'Día siguiente', textContent: '›', disabled: isT, onclick: () => { const n = shiftDay(D, 1); vday = n >= today ? '' : n; render(); } }),
+      isT ? '' : h('button', { type: 'button', textContent: 'Volver a hoy', onclick: () => { vday = ''; render(); } })));
 
   renderPending(today, byId);
   renderRest(today);
@@ -209,7 +221,8 @@ function render() {
   const days = [...Array(14)].map((_, i) => shiftDay(today, i - 13));
   const cnt = days.map(d => logs.filter(x => x.practice_date === d).length), mx = Math.max(1, ...cnt);
   $('c-days').replaceChildren(h('div', { className: 'cols' }, days.map((d, i) =>
-    h('div', { className: 'col' + (d === today ? ' now' : ''), title: d + ': ' + cnt[i] }, String(cnt[i]), h('i', { style: `height:${cnt[i] / mx * 90}px` }), d.slice(8)))));
+    h('button', { type: 'button', className: 'col' + (d === today ? ' now' : '') + (d === D ? ' pick' : ''), title: fD(d) + ': ' + cnt[i], ariaLabel: fD(d) + ': ' + cnt[i] + (cnt[i] === 1 ? ' bitácora' : ' bitácoras'), ariaPressed: String(d === D),
+      onclick: () => { vday = d >= today ? '' : d; render(); } }, String(cnt[i]), h('i', { style: `height:${cnt[i] / mx * 90}px` }), d.slice(8)))));
   const gr = {}; logs.forEach(x => { const g = byId[x.student_id]?.grade || '?'; gr[g] = (gr[g] || 0) + 1; });
   const gm = Math.max(1, ...Object.values(gr));
   $('c-grade').replaceChildren(...Object.entries(gr).map(([g, n]) =>
@@ -715,14 +728,18 @@ function noteRow(n) {
     h('p', { textContent: n.note }));
 }
 function studentRow(s) {
-  const today = todayGT();
+  const today = todayGT(), D = viewDay(), isT = D === today;
   const mine = logs.filter(x => x.student_id === s.id), inc = mine.filter(x => x.has_incident).length, n = mine.length;
   const m = missesOf(s.id, today), rei = m.length >= REINC_N, sNotes = notes.filter(x => x.student_id === s.id);
-  const tl = mine.find(x => x.practice_date === today), stale = mine.find(x => isStale(x, today));
-  const led = stale ? h('div', { className: 'led late', textContent: `Sin cerrar desde el ${fD(stale.practice_date)} (hace ${dias(dayDiff(stale.practice_date, today))})` })
-    : tl?.status === 'submitted' ? h('div', { className: 'led done', textContent: `Jornada completada, salida ${fT(tl.exit_at)}` })
-    : tl?.status === 'in_progress' ? h('div', { className: 'led on', textContent: `En jornada, entrada ${fT(tl.entry_at)}` })
-    : restFor(s.id, today) ? h('div', { className: 'led rest', textContent: 'Día de descanso hoy' + (restFor(s.id, today).reason ? ': ' + restFor(s.id, today).reason : '') }) : '';
+  const tl = mine.find(x => x.practice_date === D), stale = mine.find(x => isStale(x, today));
+  const wd = new Date(D + 'T12:00:00Z').getUTCDay(), when = isT ? '' : ' ese día';
+  const led = !isT && tl?.status === 'in_progress' ? h('div', { className: 'led late', textContent: `Sin cerrar, entrada ${fT(tl.entry_at).slice(0, 5)}` })
+    : stale && isT ? h('div', { className: 'led late', textContent: `Sin cerrar desde hace ${dias(dayDiff(stale.practice_date, today))}` })
+    : tl?.status === 'submitted' ? h('div', { className: 'led done', textContent: `Completada${when}, salida ${fT(tl.exit_at).slice(0, 5)}` })
+    : tl?.status === 'unclosed' ? h('div', { className: 'led late', textContent: 'Jornada no concluida' })
+    : tl?.status === 'in_progress' ? h('div', { className: 'led on', textContent: `En jornada desde ${fT(tl.entry_at).slice(0, 5)}` })
+    : restFor(s.id, D) ? h('div', { className: 'led rest', textContent: `Día de descanso${isT ? ' hoy' : ''}` + (restFor(s.id, D).reason ? ': ' + restFor(s.id, D).reason : '') })
+    : !isT && s.active && wd !== 0 && wd !== 6 ? h('div', { className: 'led none', textContent: 'Sin bitácora ese día' }) : '';
   const fact = (k, v) => h('div', {}, h('small', { textContent: k }), h('span', { textContent: v || '—' }));
   const tools = h('div', { className: 'tools' },
     rei ? h('div', { className: 'banner', textContent: `Reincidente: ${m.length} jornadas sin cerrar a tiempo en los últimos ${REINC_DIAS} días. Considere registrar una amonestación.` }) : '',
@@ -731,18 +748,24 @@ function studentRow(s) {
     s.program ? h('button', { type: 'button', className: 'sec', textContent: `Pasar a ${progName(s.program === 'prepractica' ? 'practica' : 'prepractica')}`, onclick: () => setProgram(s) })
       : h('button', { type: 'button', className: 'sec', textContent: 'Asignar Práctica Supervisada', onclick: () => setProgramFirst(s, 'practica') }),
     !s.program ? h('button', { type: 'button', className: 'sec', textContent: 'Asignar Prepráctica', onclick: () => setProgramFirst(s, 'prepractica') }) : '');
+  const tel = (s.supervisor_contact || '').replace(/[^\d+]/g, '');
+  const rows = mine.map(x => { const r = logRow(x, s); if (x.practice_date === D && !isT) { r.classList.add('pick'); r.open = true; } return r; });
+  // Resumen compacto: nombre, grado, estado del día y total. Todo lo demás va al expandir.
   return h('details', { className: 'stu' + (s.active ? '' : ' off'), id: 'stu-' + s.id }, h('summary', {}, avatar(s),
-    h('div', { className: 'who' }, h('b', { textContent: s.full_name + (s.active ? '' : ' (inactivo)') }), s.active ? '' : h('span', { className: 'pg off', textContent: 'Inactivo' }), h('span', { className: 'pg ' + (s.program || 'none'), textContent: progName(s.program) }), h('span', { className: 'enc', textContent: s.supervisor_name ? `Encargado: ${s.supervisor_name}${s.supervisor_contact ? ' · ' + s.supervisor_contact : ''}` : 'Encargado: sin registrar' }), led,
-      h('div', { className: 'facts' }, fact('Tipo de práctica', progName(s.program)), fact('Empresa o institución', s.institution), fact('Dirección de la empresa', s.practice_place),
-        fact('Encargado de la práctica', s.supervisor_name), fact('Contacto del encargado', s.supervisor_contact),
-        fact('Grado y sección', `${s.grade}, sección ${s.section}`))),
-    h('div', { className: 'cnt' }, h('b', { textContent: n }), n === 1 ? ' bitácora' : ' bitácoras',
+    h('div', { className: 'who' }, h('b', { textContent: s.full_name }),
+      h('span', { className: 'gr' }, `${s.grade} ${s.section} `), h('span', { className: 'badges' }, h('span', { className: 'pg ' + (s.program || 'none'), textContent: progName(s.program) }), s.active ? '' : h('span', { className: 'pg off', textContent: 'Inactivo' })), led),
+    h('div', { className: 'cnt' }, h('b', { textContent: n }), h('small', { textContent: n === 1 ? 'bitácora' : 'bitácoras' }),
       inc ? h('em', { textContent: inc === 1 ? '1 incidente' : inc + ' incidentes' }) : '',
-      m.length ? h('em', { className: rei ? 'rei' : 'warn', textContent: rei ? `Reincidente (${m.length} en ${REINC_DIAS} d)` : `${m.length} sin cerrar a tiempo` }) : ''),
+      m.length ? h('em', { className: rei ? 'rei' : 'warn', textContent: rei ? 'Reincidente' : `${m.length} sin cerrar` }) : ''),
     h('span', { className: 'sign' })),
-    h('div', { className: 'inner' }, tools,
+    h('div', { className: 'inner' },
+      h('div', { className: 'facts' }, fact('Tipo de práctica', progName(s.program)), fact('Empresa o institución', s.institution), fact('Dirección de la empresa', s.practice_place),
+        fact('Encargado de la práctica', s.supervisor_name || 'Sin registrar'),
+        h('div', {}, h('small', { textContent: 'Contacto del encargado' }), s.supervisor_contact && tel ? h('a', { className: 'tel', href: 'tel:' + tel, textContent: s.supervisor_contact }) : h('span', { textContent: '—' })),
+        fact('Grado y sección', `${s.grade}, sección ${s.section}`)),
+      tools,
       sNotes.length ? h('div', { className: 'notes' }, h('h4', { textContent: 'Notas del administrador' }), sNotes.map(noteRow)) : '',
-      n ? h('div', { className: 'trace' }, mine.map(x => logRow(x, s)))
+      n ? h('div', { className: 'trace' }, rows)
         : h('p', { className: 'empty', textContent: 'Todavía no ha enviado bitácoras.' })));
 }
 // ---- Visor de video a pantalla completa ----
