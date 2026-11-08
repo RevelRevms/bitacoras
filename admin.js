@@ -883,7 +883,7 @@ function logRow(x, s) {
   const sub = un ? `Entrada ${fT(x.entry_at)}, sin hora de salida`
     : stale ? `Entrada ${fT(x.entry_at)}, sin hora de salida (hace ${dias(dayDiff(x.practice_date, today))})`
     : late ? `Entrada ${fT(x.entry_at)}, enviada con retraso`
-    : `Entrada ${fT(x.entry_at)}, salida ${fT(x.exit_at)} (${dur(mins(x))})`;
+    : `Entrada ${fT(x.entry_at)}, salida ${fT(x.exit_at)} (${Horas.minutes(x) !== null ? Horas.fHM(Horas.minutes(x)) + ' sin almuerzo' : dur(mins(x))})`;
   return h('details', { className: 'log' + (x.has_incident || stale || un ? ' inc' : ''), id: 'log-' + x.id }, h('summary', {},
     h('time', { textContent: d.toLocaleDateString('es-GT', { weekday: 'short', day: 'numeric', month: 'short' }) }),
     h('div', { className: 'who' }, h('b', { textContent: title }), h('span', { textContent: sub })),

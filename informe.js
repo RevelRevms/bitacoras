@@ -88,11 +88,11 @@ function draw() {
       h('h3', { textContent: 'Resumen por mes' }),
       Object.keys(bymonth).length ? h('table', { className: 'tb' }, h('thead', {}, h('tr', {}, ...['Mes', 'Jornadas', 'Horas', 'Extras', 'Incidentes', 'Incumplimientos'].map((t, i) => h('th', { textContent: t, className: i ? 'r' : '' })))),
         h('tbody', {}, Object.entries(bymonth).map(([k, o]) => h('tr', {}, h('td', { textContent: mon(k + '-01') }), ...[o.n, fHM(o.t), o.e ? '+' + fHM(o.e) : '—', o.i || '—', o.f || '—'].map(v => h('td', { className: 'r', textContent: v })))))) : '',
-      h('p', { className: 'fine', textContent: 'Las horas se calculan con la hora de entrada y de salida de cada jornada enviada a tiempo. Las jornadas sin cerrar, no concluidas o con cierre tardío no tienen hora de salida real y no suman horas. Hora extra es lo que pasa de 8 horas en un mismo día.' })),
+      h('p', { className: 'fine', textContent: 'Las horas se calculan con la hora de entrada y de salida de cada jornada enviada a tiempo, sin contar la hora de almuerzo. Las jornadas sin cerrar, no concluidas o con cierre tardío no tienen hora de salida real y no suman horas. Hora extra es lo que pasa de 8 horas en un mismo día.' })),
     nn.length ? h('section', { className: 'blk' }, h('h3', { textContent: 'Observaciones y amonestaciones' }),
       nn.map(n => h('div', { className: 'nt ' + n.kind }, h('b', { textContent: (n.kind === 'amonestacion' ? 'Amonestación' : 'Observación') + ' · ' + fDT(n.created_at) }), h('p', { textContent: n.note })))) : '',
     h('section', { className: 'blk' }, h('h3', { textContent: 'Registro diario' }),
-      A.length ? h('table', { className: 'tb day' }, h('thead', {}, h('tr', {}, ...['Fecha', 'Entrada', 'Salida', 'Horas', 'Extra', 'Detalle'].map((t, i) => h('th', { textContent: t, className: i > 0 && i < 5 ? 'r' : '' })))),
+      A.length ? h('table', { className: 'tb day' }, h('thead', {}, h('tr', {}, ...['Fecha', 'Entrada', 'Salida', 'Horas netas', 'Extra', 'Detalle'].map((t, i) => h('th', { textContent: t, className: i > 0 && i < 5 ? 'r' : '' })))),
         h('tbody', {}, A.map(x => { const m = Horas.minutes(x), st = x.status === 'unclosed' ? 'No concluida (cerrada por la administración)' : x.status === 'in_progress' ? (x.practice_date < todayGT() ? 'Sin cerrar' : 'En curso') : x.closed_late ? 'Cierre tardío' : '';
           return h('tr', { className: x.has_incident || st ? 'flag' : '' },
             h('td', { textContent: fDw(x.practice_date) }), h('td', { className: 'r', textContent: fT(x.entry_at) }),
