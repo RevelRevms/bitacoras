@@ -384,11 +384,17 @@ async function openPic() {
   sel.value = vt.getSettings().deviceId || '';
   $('pic-shot').disabled = false;
 }
+// Foto de inicio solo con cámara en vivo. Para volver a mostrar «elija una imagen de su galería», ponga GALERIA_FOTO = true.
+const GALERIA_FOTO = false;
+if (!GALERIA_FOTO) { $('sp-file').classList.add('hidden'); $('sp-file').previousElementSibling?.classList.add('hidden'); }
+const OPC_GAL = GALERIA_FOTO ? ' Use el selector de imagen.' : '';
 $('b-pic').onclick = async () => {
-  if (!navigator.mediaDevices?.getUserMedia) return msg('Este navegador no permite usar la cámara. Use el selector de imagen.');
+  if (!navigator.mediaDevices?.getUserMedia) {
+    if (!GALERIA_FOTO) return $('sp-file').click();   // el selector oculto abre la cámara del teléfono (capture)
+    return msg('Este navegador no permite usar la cámara. Use el selector de imagen.'); }
   msg(''); $('pic-modal').classList.remove('hidden');
   try { await openPic(); } catch (err) { closePic();
-    msg('No se pudo usar la cámara: ' + err.message + ' Permita el acceso o use el selector de imagen.'); }
+    msg('No se pudo usar la cámara: ' + err.message + ' Permita el acceso a la cámara.' + OPC_GAL); }
 };
 const rePic = async () => { try { await openPic(); } catch (err) { $('pic-status').textContent = 'No se pudo cambiar de cámara: ' + err.message; } };
 $('pic-flip').onclick = () => { pFacing = pFacing === 'user' ? 'environment' : 'user'; savePicId(''); rePic(); };
@@ -432,6 +438,10 @@ function setVideo(blob, type, name) {
   $('v-info').textContent = `Tamaño: ${mb} MB`; $('v-view').classList.add('hidden');
   saveVideo(blob, type, name);   // se guarda ya: no hace falta esperar al cierre de la jornada
 }
+// Video solo grabado con la cámara de la app. Para volver a mostrar «elija un archivo», ponga GALERIA_VIDEO = true.
+const GALERIA_VIDEO = false;
+if (!GALERIA_VIDEO) { $('v-file').classList.add('hidden'); $('v-file').previousElementSibling?.classList.add('hidden');
+  $('v-intro').innerHTML = 'Grábelo <b>en cualquier momento de la jornada</b>: se guarda al instante. Al final solo cierra la jornada con el formulario.'; }
 $('v-file').onchange = e => { const f = e.target.files[0]; e.target.value = ''; if (!f) return;
   if (!f.type.startsWith('video/')) { video = null; return msg('El archivo debe ser un video.'); }
   if (f.size > MAX) { video = null; return msg('El video pesa más de 10 MB. Grábelo desde el botón de la app.'); }
@@ -477,12 +487,12 @@ async function openCam() {
   loop();
 }
 $('b-rec').onclick = async () => {
-  if (!window.MediaRecorder) return msg('Este navegador no permite grabar. Use el selector de archivo.');
+  if (!window.MediaRecorder) { if (!GALERIA_VIDEO) return $('v-file').click(); return msg('Este navegador no permite grabar. Use el selector de archivo.'); }
   msg(''); $('rec-modal').classList.remove('hidden'); $('rec-start').textContent = 'Iniciar grabación';
   $('rec-flip').disabled = $('rec-cam').disabled = $('rec-mic').disabled = false; rec = null;
   ac?.close(); ac = new AudioContext();
   try { await openCam(); } catch (err) { closeCam();
-    msg('No se pudo usar cámara y micrófono: ' + err.message + ' Permita el acceso o use el selector de archivo.'); }
+    msg('No se pudo usar cámara y micrófono: ' + err.message + ' Permita el acceso' + (GALERIA_VIDEO ? ' o use el selector de archivo.' : '.')); }
 };
 const reopen = async () => { ac?.close(); ac = new AudioContext();
   try { await openCam(); } catch (err) { $('rec-status').textContent = 'No se pudo cambiar el dispositivo: ' + err.message; } };
