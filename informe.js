@@ -12,7 +12,7 @@ const fT = d => d ? new Date(d).toLocaleTimeString('es-GT', { timeZone: TZ, hour
 const fDT = d => new Date(d).toLocaleString('es-GT', { timeZone: TZ, hour12: false, day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 const mon = d => new Date(d.slice(0, 7) + '-15T12:00:00').toLocaleDateString('es-GT', { month: 'long', year: 'numeric' });
 const J = Horas.JORNADA_MIN, fHM = Horas.fHM;
-let S = null, L = [], N = [], from = '', to = '', withText = true;
+let AV = '', S = null, L = [], N = [], from = '', to = '', withText = true;
 
 async function start() {
   const id = new URLSearchParams(location.search).get('s');
@@ -26,6 +26,8 @@ async function start() {
   if (s.error || l.error) return $('msg').textContent = 'No se pudo cargar: ' + (s.error || l.error).message;
   if (!s.data) return $('msg').textContent = 'No se encontró al estudiante o su cuenta no tiene permiso.';
   S = s.data; L = l.data || []; N = n.error ? [] : n.data || [];
+  if (S.avatar_path) { try { const r = await sb.storage.from('practice-photos').createSignedUrl(S.avatar_path, 3600);
+    if (r.data?.signedUrl) { const im = new Image(); im.src = r.data.signedUrl; await im.decode(); AV = im.src; } } catch { AV = ''; } }
   from = L[0]?.practice_date || ''; to = L.at(-1)?.practice_date || '';
   $('print').disabled = false; $('print').onclick = () => print(); draw();
 }
@@ -74,10 +76,11 @@ function draw() {
         h('p', { className: 'per', textContent: A.length ? `Periodo: ${fD(A[0].practice_date)} al ${fD(A.at(-1).practice_date)}` : 'Sin bitácoras en el periodo' })),
         h('div', { className: 'gen', textContent: 'Emitido el ' + fDT(new Date()) })),
       h('div', { className: 'id' },
-        h('h2', { textContent: S.full_name }),
+        AV ? h('img', { className: 'ph', src: AV, alt: 'Foto de ' + S.full_name }) : h('div', { className: 'ph ini', textContent: S.full_name.split(/\s+/).slice(0, 2).map(w => w[0]).join('').toUpperCase() }),
+        h('div', { className: 'idt' }, h('h2', { textContent: S.full_name }),
         h('dl', {}, ...[['Grado y sección', `${S.grade}, sección ${S.section}`], ['Tipo de práctica', PROG[lp] || 'Sin definir'], ['Estado de la cuenta', S.active ? 'Activo' : 'Inactivo'],
           ['Empresa o institución', S.institution || '—'], ['Dirección', S.practice_place], ['Encargado', [S.supervisor_name, S.supervisor_contact].filter(Boolean).join(' · ') || 'Sin registrar']]
-          .flatMap(([k, v]) => [h('dt', { textContent: k }), h('dd', { textContent: v })]))),
+          .flatMap(([k, v]) => [h('dt', { textContent: k }), h('dd', { textContent: v })])))),
       h('div', { className: 'kps' },
         kp(fHM(hs.total), 'horas trabajadas', 'ok'), kp(hs.days, 'jornadas completadas'), kp(hs.days ? fHM(hs.avg) : '—', 'promedio por jornada'),
         kp(hs.over ? '+' + fHM(hs.over) : '0 h', 'horas extra acumuladas', 'xt'), kp(hs.short, 'jornadas de menos de 8 h', hs.short ? 'low' : ''),
