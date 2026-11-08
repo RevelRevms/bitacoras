@@ -812,7 +812,9 @@ function studentRow(s) {
       h('div', { className: 'facts' }, fact('Tipo de práctica', progName(s.program)), fact('Empresa o institución', s.institution), fact('Dirección de la empresa', s.practice_place),
         fact('Encargado de la práctica', s.supervisor_name || 'Sin registrar'),
         h('div', {}, h('small', { textContent: 'Contacto del encargado' }), s.supervisor_contact && tel ? h('a', { className: 'tel', href: 'tel:' + tel, textContent: s.supervisor_contact }) : h('span', { textContent: '—' })),
-        fact('Grado y sección', `${s.grade}, sección ${s.section}`)),
+        fact('Grado y sección', `${s.grade}, sección ${s.section}`),
+        h('div', { className: 'hsum' }, h('small', { textContent: 'Horas acumuladas del período de práctica' }),
+          h('span', { textContent: hs.days ? `${Horas.fHM(hs.total)} en ${dias(hs.days)}` + (hs.over ? ` (${Horas.fHM(hs.over)} son extra)` : '') : 'Sin jornadas completadas todavía' }))),
       tools,
       sNotes.length ? h('div', { className: 'notes' }, h('h4', { textContent: 'Notas del administrador' }), sNotes.map(noteRow)) : '',
       n ? h('div', { className: 'trace' }, rows)
