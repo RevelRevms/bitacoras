@@ -41,3 +41,4 @@ table.tb{width:100%;border-collapse:collapse;font-size:9pt}
 @page{size:letter;margin:.5in .55in .6in;@bottom-center{content:"Página " counter(page) " de " counter(pages);font:8pt "Atkinson",sans-serif;color:#56607a}}
 @media print{body{background:#fff}.noprint{display:none!important}#rep{max-width:none;margin:0;padding:0;box-shadow:none}}
 @media(max-width:700px){#rep{padding:16px}.kps{grid-template-columns:repeat(2,1fr)}.sigs{grid-template-columns:1fr}}
+h3{break-after:avoid;page-break-after:avoid}.unit,.blk>h3+.nt,figure,.id,.rh{break-inside:avoid}.unit{margin-bottom:4px}.blk{break-inside:auto}
