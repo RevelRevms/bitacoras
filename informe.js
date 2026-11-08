@@ -12,6 +12,8 @@ const fT = d => d ? new Date(d).toLocaleTimeString('es-GT', { timeZone: TZ, hour
 const fDT = d => new Date(d).toLocaleString('es-GT', { timeZone: TZ, hour12: false, day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 const mon = d => new Date(d.slice(0, 7) + '-15T12:00:00').toLocaleDateString('es-GT', { month: 'long', year: 'numeric' });
 const J = Horas.JORNADA_MIN, fHM = Horas.fHM;
+// «Volver» cierra esta pestaña (el panel sigue abierto en la otra). Si el navegador no deja cerrarla, abre el panel aquí.
+$('back').onclick = e => { e.preventDefault(); window.close(); setTimeout(() => { location.href = 'admin.html'; }, 250); };
 let AV = '', S = null, L = [], N = [], from = '', to = '', withText = true;
 
 async function start() {
