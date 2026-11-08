@@ -191,3 +191,10 @@ table.ns th{background:var(--field)}table.ns td.pw{font-family:ui-monospace,Cons
   .fig b{font-size:3.2rem}
 }
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+/* Horas: verde = jornada completa, ámbar = menos de 8 h, azul = extras acumuladas */
+.hrs{display:flex;gap:6px;flex-wrap:wrap;margin-top:4px}
+.hc{display:inline-block;padding:1px 8px;border-radius:3px;border:1.5px solid var(--c);color:var(--t);background:var(--b);font:700 .8rem/1.5 var(--body);font-variant-numeric:tabular-nums;white-space:nowrap}
+.hc.ok{--c:#1e7a4b;--t:#0f5a34;--b:#e4f4ea}.hc.low{--c:#c28a00;--t:#7a5200;--b:#fff4cc}.hc.xtra{--c:#2b5fb4;--t:#1c4b8f;--b:#e3eefc}
+a.btn{display:inline-flex;align-items:center;min-height:46px;padding:10px 16px;font:600 .98rem var(--body);color:var(--ink);text-decoration:none;background:#fff;border:2px solid var(--rule2);border-radius:4px}
+a.btn:hover{background:var(--field)}
+.who .hc{display:inline-block;color:var(--t);font-size:.8rem;overflow:visible}

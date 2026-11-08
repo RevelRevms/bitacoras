@@ -787,17 +787,23 @@ function studentRow(s) {
   const fact = (k, v) => h('div', {}, h('small', { textContent: k }), h('span', { textContent: v || '—' }));
   const tools = h('div', { className: 'tools' },
     rei ? h('div', { className: 'banner', textContent: `Reincidente: ${m.length} jornadas sin cerrar a tiempo en los últimos ${REINC_DIAS} días. Considere registrar una amonestación.` }) : '',
+    h('a', { className: 'btn sec', href: 'informe.html?s=' + s.id, target: '_blank', rel: 'noopener', textContent: 'Informe en PDF (carta)' }),
     h('button', { type: 'button', className: 'sec', textContent: 'Registrar nota o amonestación', onclick: () => addNote(s) }),
     h('button', { type: 'button', className: s.active ? 'sec' : '', textContent: s.active ? 'Inactivar estudiante' : 'Activar estudiante', onclick: () => setActive(s) }),
     s.program ? h('button', { type: 'button', className: 'sec', textContent: `Pasar a ${progName(s.program === 'prepractica' ? 'practica' : 'prepractica')}`, onclick: () => setProgram(s) })
       : h('button', { type: 'button', className: 'sec', textContent: 'Asignar Práctica Supervisada', onclick: () => setProgramFirst(s, 'practica') }),
     !s.program ? h('button', { type: 'button', className: 'sec', textContent: 'Asignar Prepráctica', onclick: () => setProgramFirst(s, 'prepractica') }) : '');
+  const hs = Horas.summarize(mine), dm = Horas.minutes(tl);
+  const hrs = (dm !== null || hs.over) ? h('div', { className: 'hrs' },
+    dm !== null ? h('span', { className: 'hc ' + (dm >= Horas.JORNADA_MIN ? 'ok' : 'low'), title: dm >= Horas.JORNADA_MIN ? 'Jornada completa' : 'Jornada menor a 8 horas',
+      textContent: Horas.fHM(dm) + (isT ? ' hoy' : ' ese día') }) : '',
+    hs.over ? h('span', { className: 'hc xtra', title: 'Horas extra acumuladas: lo trabajado después de las 8 horas de cada día', textContent: '+' + Horas.fHM(hs.over) + ' extra' }) : '') : '';
   const tel = (s.supervisor_contact || '').replace(/[^\d+]/g, '');
   const rows = mine.map(x => { const r = logRow(x, s); if (x.practice_date === D && !isT) { r.classList.add('pick'); r.open = true; } return r; });
   // Resumen compacto: nombre, grado, estado del día y total. Todo lo demás va al expandir.
   return h('details', { className: 'stu' + (s.active ? '' : ' off'), id: 'stu-' + s.id }, h('summary', {}, avatar(s),
     h('div', { className: 'who' }, h('b', { textContent: s.full_name }),
-      h('span', { className: 'gr' }, `${s.grade} ${s.section} `), h('span', { className: 'badges' }, h('span', { className: 'pg ' + (s.program || 'none'), textContent: progName(s.program) }), s.active ? '' : h('span', { className: 'pg off', textContent: 'Inactivo' })), led),
+      h('span', { className: 'gr' }, `${s.grade} ${s.section} `), h('span', { className: 'badges' }, h('span', { className: 'pg ' + (s.program || 'none'), textContent: progName(s.program) }), s.active ? '' : h('span', { className: 'pg off', textContent: 'Inactivo' })), led, hrs),
     h('div', { className: 'cnt' }, h('b', { textContent: n }), h('small', { textContent: n === 1 ? 'bitácora' : 'bitácoras' }),
       inc ? h('em', { textContent: inc === 1 ? '1 incidente' : inc + ' incidentes' }) : '',
       m.length ? h('em', { className: rei ? 'rei' : 'warn', textContent: rei ? 'Reincidente' : `${m.length} sin cerrar` }) : ''),
