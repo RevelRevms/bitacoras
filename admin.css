@@ -16,7 +16,7 @@ body{margin:0;font:400 .97rem/1.5 var(--body);background:var(--paper);color:var(
 .top{background:var(--ink);color:#fff;padding:16px var(--gut) 12px;border-bottom:4px solid var(--hl)}
 .top h1{margin:0 auto;max-width:1180px;font:700 2rem/1 var(--head);display:flex;flex-direction:column}
 .top h1 span{font:500 1.05rem/1.2 var(--head);color:#b9c9e6;letter-spacing:.04em;margin-top:2px}
-.top{position:relative}.gomos{position:absolute;right:var(--gut);top:16px;display:inline-flex;align-items:center;min-height:40px;padding:6px 14px;border:2px solid var(--hl);border-radius:4px;color:var(--hl);font-weight:700;font-size:.92rem;text-decoration:none}.gomos:hover{background:var(--hl);color:var(--ink)}
+.top{position:relative}.hact{display:flex;gap:8px;margin-top:12px;max-width:1180px;margin-left:auto;margin-right:auto}.hact.hidden{display:none}.gomos{display:inline-flex;font-family:inherit;cursor:pointer;background:none;align-items:center;min-height:40px;padding:6px 14px;border:2px solid var(--hl);border-radius:4px;color:var(--hl);font-weight:700;font-size:.92rem;text-decoration:none}.gomos:hover{background:var(--hl);color:var(--ink)}
 .top .sub{max-width:1180px;margin:8px auto 0;color:#b9c9e6;font-size:.85rem}.top .sub:empty{display:none}
 main{max-width:1180px;margin:0 auto;padding:0 var(--gut) 56px;background:var(--paper)}
 h2{font:700 1.3rem/1.15 var(--head);margin:0 0 8px}
@@ -48,7 +48,7 @@ button:disabled{background:#eef1f6;color:#6b7590;border:2px dashed var(--rule2);
 .pend{margin:0 calc(var(--gut) * -1);padding:16px var(--gut);background:var(--red-soft);border-top:3px solid var(--red)}
 .pend h2{color:var(--red);margin-bottom:2px}
 .card{padding:16px 0;border-bottom:1px solid var(--rule)}
-#login.card{max-width:420px;display:grid;gap:12px;padding-top:24px}
+#login.card{max-width:440px;margin:0 auto;padding:28px 0 32px;border-bottom:0}#login .cover{font:700 2.1rem/1.05 var(--head);margin:0 0 6px}#login .info{color:var(--mut);margin:0 0 4px}#login label{display:block;font-weight:700;margin:20px 0 6px}#login input{width:100%}#login button[type=submit],#login>button{width:100%;min-height:52px;margin-top:24px;font-size:1.05rem;box-shadow:3px 3px 0 var(--ink)}
 /* herramientas: acordeones de libro */
 .restcard{padding:0;border-bottom:1px solid var(--rule)}
 .restcard>summary{display:flex;align-items:center;gap:10px;min-height:56px;padding:8px 0;cursor:pointer;list-style:none}
@@ -200,3 +200,12 @@ a.btn:hover{background:var(--field)}
 .who .hc{display:inline-block;color:var(--t);font-size:.8rem;overflow:visible}
 .hsum{grid-column:1/-1;padding:8px 10px;background:#e4f4ea;border-left:5px solid var(--ok)}.hsum span{display:block;font:700 1.15rem var(--head);color:#0f5a34}
 .note.annulled{background:#f1f3f8;border-left-color:var(--rule2)}.note.annulled .tx{text-decoration:line-through;color:var(--mut)}.note .anu{color:#7a1f1a;font-size:.86rem;font-weight:600;margin-top:4px}.note button.small{margin-top:6px;min-height:40px}
+
+.pic.zoom{cursor:zoom-in}.pic.zoom:focus-visible{outline:3px solid var(--hl);outline-offset:2px}.vmodal.av img{object-fit:contain}
+
+.gomos.salir{border-color:#b9c9e6;color:#fff;box-shadow:none}.gomos.salir:hover{background:#fff;color:var(--ink)}
+.hact .gomos.hidden{display:none}
+@media(min-width:768px){
+  .hact{position:absolute;right:var(--gut);top:22px;margin:0}
+  main:has(#login:not(.hidden)){max-width:520px;margin-top:56px;padding:12px 28px 16px}
+}

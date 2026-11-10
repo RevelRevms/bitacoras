@@ -18,7 +18,7 @@ const dias = n => `${n} ${n === 1 ? 'día' : 'días'}`;
 const fD = d => new Date(d + 'T12:00:00').toLocaleDateString('es-GT', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
 const fT = d => d ? new Date(d).toLocaleTimeString('es-GT', { timeZone: TZ, hour12: false }) : '—';
 const fDT = d => d ? new Date(d).toLocaleString('es-GT', { timeZone: TZ, hour12: false, day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—';
-const show = (login, app) => { $('login').classList.toggle('hidden', !login); $('app').classList.toggle('hidden', !app); };
+const show = (login, app) => { $('login').classList.toggle('hidden', !login); $('app').classList.toggle('hidden', !app); $('hact').classList.toggle('hidden', !app); };
 
 // ---- Quién hizo cada cosa ----
 const roleName = r => r === 'admin' ? 'Administrador' : r === 'supervisor' ? 'Supervisor' : 'Sin rol';
@@ -115,7 +115,20 @@ async function loadAvatars() {
 const avUrl = s => s.avatar_path && avs[s.avatar_path]?.u || '';
 const ini = s => s.full_name.split(/\s+/).slice(0, 2).map(w => w[0]).join('').toUpperCase();
 function avatar(s, cls = 'mk') { const u = avUrl(s);
-  return u ? h('div', { className: cls + ' pic', role: 'img', ariaLabel: s.full_name, style: `background-image:url("${u}")` }) : h('div', { className: cls, textContent: ini(s) }); }
+  if (!u) return h('div', { className: cls, textContent: ini(s) });
+  const open = e => { e.preventDefault(); e.stopPropagation(); viewAvatar(s, u, e.currentTarget); };   // dentro de <summary>: no abrir ni cerrar la tarjeta
+  return h('div', { className: cls + ' pic zoom', role: 'button', tabIndex: 0, title: 'Ver foto', ariaLabel: 'Ver foto de ' + s.full_name, style: `background-image:url("${u}")`,
+    onclick: open, onkeydown: e => { if (e.key === 'Enter' || e.key === ' ') open(e); } }); }
+function viewAvatar(s, url, from) {
+  if (vm) return;
+  const prev = from || document.activeElement;
+  const close = () => { document.removeEventListener('keydown', onKey); document.body.classList.remove('noscroll'); vm.remove(); vm = null; prev?.focus?.(); };
+  const onKey = e => { if (e.key === 'Escape') close(); };
+  const x1 = h('button', { type: 'button', className: 'vclose', textContent: '✕ Cerrar', onclick: close });
+  vm = h('div', { className: 'vmodal av', role: 'dialog', ariaModal: 'true', ariaLabel: 'Foto de ' + s.full_name, onclick: e => { if (e.target === vm) close(); } },
+    h('div', { className: 'vbar' }, h('span', { textContent: s.full_name }), x1), h('img', { src: url, alt: 'Foto de perfil de ' + s.full_name }));
+  document.body.append(vm); document.body.classList.add('noscroll'); document.addEventListener('keydown', onKey); x1.focus();
+}
 async function setActive(s) {
   const on = !s.active;
   const hasOpen = logs.some(x => x.student_id === s.id && x.status === 'in_progress');
@@ -913,6 +926,7 @@ $('login').onsubmit = async e => { e.preventDefault();
   const { error } = await sb.auth.signInWithPassword({ email: $('em').value, password: $('pw').value });
   if (error) return $('msg').textContent = 'Credenciales incorrectas.'; start(); };
 $('out').onclick = async () => { await sb.auth.signOut(); $('msg').textContent = ''; me = null; kf = 'active'; usage = null; acSel.clear(); staffMap = {}; audit = []; accts = []; acErr = ''; acBuilt = false; arch = []; archMap = {}; archErr = ''; vdBuilt = false; vdTo = ''; vd = { verified: [], failed: [], busy: false, ctrl: null, note: '', skipped: 0 }; acFilter = 'sin_perfil'; acQ = ''; lastCreated = null; staffBuilt = false; clearNewStu(); nsBuilt = false; show(true, false); };
+$('out-top').onclick = () => $('out').onclick();
 $('re').onclick = load;
 $('q').oninput = $('g').onchange = $('pg').onchange = $('ac').onchange = render;
 start();
