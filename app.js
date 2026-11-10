@@ -105,6 +105,7 @@ function showReceipt() {
     ['Entrada', fmtTime(log.entry_at)], ['Salida', fmtTime(log.exit_at)], ['Dirección de la empresa', log.practice_place],
     ['Actividad principal', log.main_activity],
     ['Evidencia', log.start_photo_path ? 'Foto de inicio y video cargados correctamente' : 'Video cargado correctamente']];
+  const hm = Horas.minutes(log); if (hm !== null) rows.splice(4, 0, ['Horas de hoy', Horas.fHM(hm) + (hm > Horas.JORNADA_MIN ? ` (+${Horas.fHM(hm - Horas.JORNADA_MIN)} extra)` : '') + ', sin almuerzo']);
   if (log.closed_late) rows.splice(4, 0, ['Cierre', 'Tardío (jornada de un día anterior)']);
   const dl = $('receipt'); dl.replaceChildren();
   rows.forEach(([k, v]) => { const dt = document.createElement('dt'), dd = document.createElement('dd');
@@ -246,8 +247,20 @@ function renderWarns() {
         (lg ? ` · sobre la jornada del ${fmtDate(lg.practice_date)}` : '') }),
       el('p', { textContent: n.note }))); });
 }
+const chips = x => { const m = Horas.minutes(x); if (m === null) return '';
+  return el('span', { className: 'hrs' }, el('i', { className: 'hc ' + (m >= Horas.JORNADA_MIN ? 'ok' : 'low'), textContent: Horas.fHM(m) }),
+    m > Horas.JORNADA_MIN ? el('i', { className: 'hc xtra', textContent: '+' + Horas.fHM(m - Horas.JORNADA_MIN) + ' extra' }) : ''); };
+function renderHours() {
+  const box = $('hrs-card'); box.replaceChildren(); const hs = Horas.summarize(myLogs);
+  if (!myLogs.length) return;
+  const f = (v, k, c) => el('div', { className: 'hf ' + c }, el('b', { textContent: v }), el('span', { textContent: k }));
+  box.append(el('h3', { textContent: 'Mis horas' }),
+    el('div', { className: 'hfs' }, f(Horas.fHM(hs.total), 'horas acumuladas', 'hfg'), f(hs.over ? '+' + Horas.fHM(hs.over) : '0 h', 'horas extra acumuladas', 'hfb'), f(String(hs.days), 'jornadas contadas', '')),
+    el('p', { className: 'info', textContent: 'Cada jornada se cuenta sin la hora de almuerzo. Es hora extra lo que pasa de 8 horas en un día. No suman las jornadas sin cerrar, no concluidas o cerradas tarde.' }),
+    el('a', { className: 'btn sec', href: 'informe.html?s=' + user.id, target: '_blank', rel: 'noopener', textContent: 'Ver mi informe (carta)' }));
+}
 function renderHist() {
-  const box = $('hist-list'); box.replaceChildren();
+  const box = $('hist-list'); box.replaceChildren(); renderHours();
   if (!myLogs.length) return box.append(el('p', { className: 'info', textContent: 'Aún no tiene bitácoras registradas.' }));
   myLogs.forEach(x => {
     const body = el('dl'), row = (k, v, c = '') => { if (v) body.append(el('dt', { className: c, textContent: k }), el('dd', { className: c, textContent: v })); };
@@ -270,6 +283,7 @@ function renderHist() {
       el('div', { className: 'hd', textContent: d.toLocaleDateString('es-GT', { weekday: 'short', day: 'numeric', month: 'short' }) }),
       el('div', { className: 'hm' }, el('b', { textContent: x.main_activity || (un ? 'Jornada no concluida' : 'Jornada en curso') }),
         el('span', { textContent: `Entrada ${fmtTime(x.entry_at)}, salida ${x.exit_at ? fmtTime(x.exit_at) : '—'}` }),
+        chips(x),
         un ? el('span', { className: 'tg', textContent: 'No concluida' }) : '',
         x.closed_late ? el('span', { className: 'tg2', textContent: 'Cierre tardío' }) : '',
         x.has_incident ? el('span', { className: 'tg', textContent: 'Con incidente' }) : '')), body));
@@ -339,7 +353,7 @@ $('f-sup').onsubmit = async e => { e.preventDefault(); msg(''); $('sup-ok').text
   } catch (err) { fail(err); } finally { b.disabled = false; } };
 
 // Cambiar la foto de perfil cuando quiera
-$('b-avchg').onclick = () => $('av-chg').click();
+document.querySelectorAll('.chg-av').forEach(b => b.onclick = () => $('av-chg').click());
 $('av-chg').onchange = async e => { const f = e.target.files[0]; e.target.value = ''; if (!f) return; msg('');
   let path;
   try {

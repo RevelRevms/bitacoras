@@ -2,7 +2,7 @@
 <html lang="es"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Bitácora de práctica supervisada</title>
-<link rel="stylesheet" href="styles.css?v=16"></head><body><header class="top"><h1>Bitácora<span id="ttl-sub">de práctica supervisada</span></h1></header><main class="sheet">
+<link rel="stylesheet" href="styles.css?v=18"></head><body><header class="top"><h1>Bitácora<span id="ttl-sub">de práctica supervisada</span></h1></header><main class="sheet">
 <div id="msg" class="err" role="alert"></div>
 
 <section id="s-login" class="card hidden"><h2 class="cover">Registre su jornada de hoy</h2><p class="info">Entre con el correo y la contraseña que le dio su administrador.</p><form id="f-login">
@@ -45,7 +45,7 @@
 <button>Guardar y continuar</button></form></section>
 
 <section id="s-home" class="card hidden"><div class="me"><div id="me-av" class="av"></div><div id="who" class="info"></div></div>
-<button type="button" id="b-avchg" class="sec small">Cambiar mi foto de perfil</button><input id="av-chg" type="file" accept="image/*" class="hidden">
+<button type="button" id="b-avchg" class="sec small chg-av">Cambiar mi foto de perfil</button><input id="av-chg" type="file" accept="image/*" class="hidden">
 <p id="today" class="today"></p><p id="rest-today" class="notice restnow hidden"></p>
 <p id="inactive-note" class="notice bad hidden"><b>Su cuenta está inactiva.</b> No puede iniciar nuevas jornadas. Puede consultar su historial. Si cree que es un error, hable con su administrador.</p>
 <div id="start-box"><h2 class="eh">Foto de inicio de jornada</h2>
@@ -57,7 +57,7 @@
 <button id="b-start" disabled>Iniciar jornada</button></section>
 
 <section id="s-form" class="hidden">
-<div class="card"><div class="me"><div id="me-av2" class="av"></div><div id="who2" class="info"></div></div><p class="ok" id="started"></p></div>
+<div class="card"><div class="me"><div id="me-av2" class="av"></div><div id="who2" class="info"></div></div><p class="ok" id="started"></p><button type="button" class="sec small chg-av">Cambiar mi foto de perfil</button></div>
 <div class="card" id="ev-card"><h2 class="eh">Evidencias de la jornada</h2>
 <div id="ev-photo" class="info"></div>
 <h3 class="eh2">Video de unos 10 segundos</h3>
@@ -85,7 +85,7 @@
 <p id="v-need" class="notice bad hidden">Falta el video de evidencia. Grábelo o súbalo en «Evidencias de la jornada» (arriba) antes de cerrar.</p>
 <button id="b-send">Finalizar y enviar bitácora</button></form></section>
 
-<section id="s-done" class="card hidden"><div class="me"><div id="me-av3" class="av"></div><p class="stamp">Bitácora registrada correctamente</p></div><dl id="receipt"></dl></section>
+<section id="s-done" class="card hidden"><div class="me"><div id="me-av3" class="av"></div><p class="stamp">Bitácora registrada correctamente</p></div><dl id="receipt"></dl><button type="button" class="sec small chg-av">Cambiar mi foto de perfil</button></section>
 <section id="warns" class="hidden"></section>
 <section id="rests" class="hidden"></section>
 <details id="sup-card" class="card hidden"><summary id="sup-sum">Encargado de mi práctica</summary>
@@ -93,7 +93,7 @@
 <label>Nombre del encargado</label><input id="sup-n" minlength="2" maxlength="150" autocomplete="off">
 <label>Contacto del encargado (teléfono o correo)</label><input id="sup-c" maxlength="100" autocomplete="off">
 <button>Guardar lo que falta</button><p id="sup-ok" class="ok"></p></form></details>
-<section id="hist" class="hidden"><h2>Mi historial de bitácoras</h2><div id="hist-list"></div></section>
+<section id="hist" class="hidden"><div id="hrs-card" class="card"></div><h2>Mi historial de bitácoras</h2><div id="hist-list"></div></section>
 <button id="b-out" class="sec hidden">Cerrar sesión</button>
 </main>
 <div id="img-modal" class="modal full hidden" role="dialog" aria-modal="true" aria-labelledby="img-title"><div class="mbox imgbox"><div class="fbar"><span id="img-title"></span><button type="button" id="img-close" class="sec">Cerrar</button></div>
@@ -122,4 +122,4 @@
 <button type="button" id="pic-cancel" class="sec">Cancelar</button>
 </div></div></div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="supabase-config.js?v=8"></script><script src="app.js?v=22"></script></body></html>
+<script src="supabase-config.js?v=8"></script><script src="horas.js?v=2"></script><script src="app.js?v=24"></script></body></html>

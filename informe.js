@@ -13,13 +13,15 @@ const fDT = d => new Date(d).toLocaleString('es-GT', { timeZone: TZ, hour12: fal
 const mon = d => new Date(d.slice(0, 7) + '-15T12:00:00').toLocaleDateString('es-GT', { month: 'long', year: 'numeric' });
 const J = Horas.JORNADA_MIN, fHM = Horas.fHM;
 // «Volver» cierra esta pestaña (el panel sigue abierto en la otra). Si el navegador no deja cerrarla, abre el panel aquí.
-$('back').onclick = e => { e.preventDefault(); window.close(); setTimeout(() => { location.href = 'admin.html'; }, 250); };
+let HOME = 'admin.html', STUDENT = false;
+$('back').onclick = e => { e.preventDefault(); window.close(); setTimeout(() => { location.href = HOME; }, 250); };
 let AV = '', S = null, L = [], N = [], from = '', to = '', withText = true;
 
 async function start() {
   const id = new URLSearchParams(location.search).get('s');
   const { data: { session } } = await sb.auth.getSession();
   if (!session) return $('msg').textContent = 'Inicie sesión en el panel administrativo y vuelva a abrir el informe.';
+  if (session.user.id === id) { HOME = 'index.html'; STUDENT = true; $('back').href = 'index.html'; $('back').textContent = '← Cerrar y volver a mi bitácora'; }
   if (!id) return $('msg').textContent = 'Falta indicar el estudiante. Abra el informe desde su tarjeta en el panel.';
   const [s, l, n] = await Promise.all([
     sb.from('students').select('*').eq('id', id).maybeSingle(),
@@ -65,7 +67,7 @@ function chart(rows) {
 function draw() {
   const A = L.filter(x => (!from || x.practice_date >= from) && (!to || x.practice_date <= to));
   const hs = Horas.summarize(A), inc = A.filter(x => x.has_incident), un = A.filter(x => x.status === 'unclosed' || (x.status === 'in_progress' && x.practice_date < todayGT())),
-    late = A.filter(x => x.closed_late), nn = N.filter(n => !n.annulled_at && (!from || n.created_at.slice(0, 10) >= from) && (!to || n.created_at.slice(0, 10) <= to));
+    late = A.filter(x => x.closed_late), nn = N.filter(n => !n.annulled_at && (!STUDENT || n.kind === 'amonestacion') && (!from || n.created_at.slice(0, 10) >= from) && (!to || n.created_at.slice(0, 10) <= to));
   const rows = A.filter(x => x.status !== 'in_progress' || x.practice_date < todayGT()).map(x => ({ d: x.practice_date, m: Horas.minutes(x) }));
   const kp = (v, k, c = '') => h('div', { className: 'kp ' + c }, h('b', { textContent: v }), h('span', { textContent: k }));
   const lp = S.program, root = $('rep'); root.replaceChildren();
@@ -94,7 +96,7 @@ function draw() {
       Object.keys(bymonth).length ? h('table', { className: 'tb' }, h('thead', {}, h('tr', {}, ...['Mes', 'Jornadas', 'Horas', 'Extras', 'Incidentes', 'Incumplimientos'].map((t, i) => h('th', { textContent: t, className: i ? 'r' : '' })))),
         h('tbody', {}, Object.entries(bymonth).map(([k, o]) => h('tr', {}, h('td', { textContent: mon(k + '-01') }), ...[o.n, fHM(o.t), o.e ? '+' + fHM(o.e) : '—', o.i || '—', o.f || '—'].map(v => h('td', { className: 'r', textContent: v })))))) : ''),
       h('p', { className: 'fine', textContent: 'Las horas se calculan con la hora de entrada y de salida de cada jornada enviada a tiempo, sin contar la hora de almuerzo. Las jornadas sin cerrar, no concluidas o con cierre tardío no tienen hora de salida real y no suman horas. Hora extra es lo que pasa de 8 horas en un mismo día.' })),
-    nn.length ? h('section', { className: 'blk' }, h('h3', { textContent: 'Observaciones y amonestaciones' }),
+    nn.length ? h('section', { className: 'blk' }, h('h3', { textContent: nn.every(n => n.kind === 'amonestacion') ? 'Amonestaciones' : 'Observaciones y amonestaciones' }),
       nn.map(n => h('div', { className: 'nt ' + n.kind }, h('b', { textContent: (n.kind === 'amonestacion' ? 'Amonestación' : 'Observación') + ' · ' + fDT(n.created_at) }), h('p', { textContent: n.note })))) : '',
     h('section', { className: 'blk' }, h('h3', { textContent: 'Registro diario' }),
       A.length ? h('table', { className: 'tb day' }, h('thead', {}, h('tr', {}, ...['Fecha', 'Entrada', 'Salida', 'Horas netas', 'Extra', 'Detalle'].map((t, i) => h('th', { textContent: t, className: i > 0 && i < 5 ? 'r' : '' })))),
