@@ -946,7 +946,7 @@ function logRow(x, s) {
   if (s && (stale || un || late || canDel)) body.append(h('dt', { textContent: 'Acciones' }), h('dd', { className: 'acts' },
     stale ? h('button', { type: 'button', textContent: 'Cerrar como no concluida', onclick: () => closeUnclosed(x, s.full_name) }) : '',
     (stale || un || late) ? h('button', { type: 'button', className: 'sec', textContent: 'Nota o amonestación sobre esta jornada', onclick: () => addNote(s, x) }) : '',
-    canDel ? h('button', { type: 'button', className: 'sec danger', textContent: 'Eliminar jornada', onclick: () => deleteLog(x, s) }) : ''));
+    canDel ? h('button', { type: 'button', className: 'sec delbtn', textContent: 'Eliminar jornada', onclick: () => deleteLog(x, s) }) : ''));
   const d = new Date(x.practice_date + 'T12:00:00');
   const title = x.main_activity || (un ? 'Jornada no concluida' : stale ? 'Jornada sin cerrar' : 'Jornada en curso');
   const sub = un ? `Entrada ${fT(x.entry_at)}, sin hora de salida`
