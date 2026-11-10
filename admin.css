@@ -209,3 +209,4 @@ a.btn:hover{background:var(--field)}
   .hact{position:absolute;right:var(--gut);top:22px;margin:0}
   main:has(#login:not(.hidden)){max-width:520px;margin-top:56px;padding:12px 28px 16px}
 }
+button.danger,button.sec.danger{border-color:var(--red);color:var(--red)}button.danger:hover,button.sec.danger:hover{background:var(--red-soft)}

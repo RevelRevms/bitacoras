@@ -38,6 +38,7 @@ const ERRS = {
   NOTA_NO_ENCONTRADA: 'No se encontró la nota.',
   NO_ES_AMONESTACION: 'Solo se pueden eliminar amonestaciones, no observaciones.',
   YA_ANULADA: 'Esa amonestación ya estaba eliminada.',
+  JORNADA_NO_ENCONTRADA: 'Esa jornada ya no existe. Actualice la lista.',
   SIN_CUENTAS: 'Seleccione al menos una cuenta.',
   DEMASIADAS_CUENTAS: 'Seleccione como máximo 200 cuentas a la vez.',
   CORREO_YA_EXISTE: 'Ya existe una cuenta con ese correo.',
@@ -101,7 +102,7 @@ async function load() {
   await loadAvatars();
   $('msg').textContent = n.error || rd.error ? 'Algunas funciones no están disponibles (¿ya ejecutó migracion_v2.sql en Supabase?).'
     : v4 && sd.error ? 'No se pudo cargar el personal (¿ya ejecutó migracion_v4.sql en Supabase?).' : '';
-  render();
+  render(); sweepDeletedMedia();
 }
 
 // ---- Avatares: enlaces firmados en un solo lote; se reutilizan mientras no estén por vencer ----
@@ -186,6 +187,40 @@ async function closeUnclosed(x, who) {
   const { error } = await sb.rpc('admin_close_unclosed', { p_log_id: x.id, p_note: r.note });
   if (error) alert(errText(error));
   await load();
+}
+// Elimina una jornada (iniciada por error, falsa, etc.). Solo administrador, con motivo. Requiere migracion_v13.sql.
+// La base borra la bitácora y deja copia completa en la auditoría; aquí se borran de Storage su foto y su video.
+const MEDIA_BUCKET = { video_path: 'practice-videos', photo_path: 'practice-photos' };
+async function purgeMedia(files) {      // files: [{bucket, path}]; devuelve cuántos no se pudieron borrar
+  let bad = 0;
+  for (const bucket of [...new Set(files.map(f => f.bucket))]) {
+    const paths = files.filter(f => f.bucket === bucket).map(f => f.path);
+    try { const r = await sb.storage.from(bucket).remove(paths); if (r.error) bad += paths.length; } catch { bad += paths.length; }
+  }
+  if (files.length) { try { await sb.rpc('admin_media_gone', { p_paths: files.map(f => f.path) }); } catch { /* se reintenta al recargar */ } }
+  return bad;
+}
+async function deleteLog(x, s) {
+  const st = x.status === 'in_progress' ? 'jornada en curso' : x.status === 'unclosed' ? 'jornada no concluida' : 'bitácora enviada';
+  const r = await ask({ title: 'Eliminar jornada',
+    hint: `${s ? s.full_name + ' · ' : ''}${fD(x.practice_date)} · ${st}. Se borra la jornada junto con su foto de inicio y su video. Queda una copia completa del texto y el motivo en la actividad del personal. Las notas y amonestaciones sobre esta jornada se conservan. Si era la jornada de hoy, el estudiante podrá iniciar otra. No se puede deshacer.`,
+    label: 'Motivo (obligatorio: inicio por error, bitácora falsa, etc.)', min: 10, ok: 'Eliminar jornada' });
+  if (!r) return;
+  const { data, error } = await sb.rpc('admin_delete_log', { p_log: x.id, p_reason: r.note });
+  if (error) { alert(errText(error)); return await load(); }
+  const row = Array.isArray(data) ? data[0] : data, files = [];
+  if (row?.video_path) files.push({ bucket: MEDIA_BUCKET.video_path, path: row.video_path });
+  if (row?.photo_path) files.push({ bucket: MEDIA_BUCKET.photo_path, path: row.photo_path });
+  const bad = await purgeMedia(files);
+  if (bad) alert('La jornada se eliminó, pero ' + (bad === 1 ? 'un archivo' : bad + ' archivos') + ' no se pudieron borrar de Supabase. Se reintentará al recargar el panel.');
+  await load();
+}
+// Reintenta borrar de Storage lo que quedó pendiente (por ejemplo, si se cortó la red al eliminar).
+let swept = false;
+async function sweepDeletedMedia() {
+  if (me?.role !== 'admin' || swept) return; swept = true;
+  try { const r = await sb.from('deleted_media').select('path,bucket').is('removed_at', null).limit(200);
+    if (r.error || !r.data?.length) return; await purgeMedia(r.data.map(f => ({ bucket: f.bucket, path: f.path }))); } catch { /* sin migracion_v13 */ }
 }
 async function addNote(s, x) {
   const r = await ask({ title: 'Registrar nota',
@@ -413,6 +448,9 @@ function describe(a) {
   if (a.action === 'fotos_eliminadas') return `Eliminó de Supabase ${d.cantidad} ${d.cantidad === 1 ? 'foto de inicio' : 'fotos de inicio'} (${fSize(d.bytes)}) ya descargadas`;
   if (a.action === 'fotos_restauradas') return `Restauró ${d.cantidad} ${d.cantidad === 1 ? 'foto de inicio' : 'fotos de inicio'} (${fSize(d.bytes)}) en Supabase desde la carpeta descargada`;
   if (a.action === 'videos_eliminados') return `Eliminó de Supabase ${d.cantidad} ${d.cantidad === 1 ? 'video' : 'videos'} (${fSize(d.bytes)}) ya descargados`;
+  if (a.action === 'jornada_eliminada') return `Eliminó la jornada del ${d.fecha ? fD(d.fecha) : '—'} de ${d.estudiante || stu?.full_name || 'un estudiante'} (${d.estado === 'in_progress' ? 'en curso' : d.estado === 'unclosed' ? 'no concluida' : 'enviada'}) · Motivo: ${d.motivo}`;
+  if (a.action === 'amonestacion_anulada') return `Eliminó una amonestación de ${stu?.full_name || 'un estudiante'} · Motivo: ${d.motivo}`;
+  if (a.action === 'cuenta_eliminada') return `Eliminó la cuenta de ${d.nombre || d.correo} (${d.correo})`;
   if (a.action === 'personal_asignado') return `Asignó el rol de supervisor a ${d.nombre} (${d.correo})`;
   if (a.action === 'personal_modificado') return `Modificó a ${tgt?.full_name || 'personal'}: ${ch}`;
   if (a.action === 'estudiante_modificado') return `Modificó a ${stu?.full_name || 'un estudiante'}: ${ch}`;
@@ -904,9 +942,11 @@ function logRow(x, s) {
          ar ? ' Archivado; la eliminación de Supabase está pendiente.' : ''])); }
   const ln = notes.filter(n => n.log_id === x.id);
   if (ln.length) body.append(h('dt', { textContent: 'Notas del administrador' }), h('dd', { className: 'notes' }, ln.map(noteRow)));
-  if (s && (stale || un || late)) body.append(h('dt', { textContent: 'Acciones' }), h('dd', { className: 'acts' },
+  const canDel = me?.role === 'admin' && !!s;
+  if (s && (stale || un || late || canDel)) body.append(h('dt', { textContent: 'Acciones' }), h('dd', { className: 'acts' },
     stale ? h('button', { type: 'button', textContent: 'Cerrar como no concluida', onclick: () => closeUnclosed(x, s.full_name) }) : '',
-    h('button', { type: 'button', className: 'sec', textContent: 'Nota o amonestación sobre esta jornada', onclick: () => addNote(s, x) })));
+    (stale || un || late) ? h('button', { type: 'button', className: 'sec', textContent: 'Nota o amonestación sobre esta jornada', onclick: () => addNote(s, x) }) : '',
+    canDel ? h('button', { type: 'button', className: 'sec danger', textContent: 'Eliminar jornada', onclick: () => deleteLog(x, s) }) : ''));
   const d = new Date(x.practice_date + 'T12:00:00');
   const title = x.main_activity || (un ? 'Jornada no concluida' : stale ? 'Jornada sin cerrar' : 'Jornada en curso');
   const sub = un ? `Entrada ${fT(x.entry_at)}, sin hora de salida`
@@ -925,7 +965,7 @@ function logRow(x, s) {
 $('login').onsubmit = async e => { e.preventDefault();
   const { error } = await sb.auth.signInWithPassword({ email: $('em').value, password: $('pw').value });
   if (error) return $('msg').textContent = 'Credenciales incorrectas.'; start(); };
-$('out').onclick = async () => { await sb.auth.signOut(); $('msg').textContent = ''; me = null; kf = 'active'; usage = null; acSel.clear(); staffMap = {}; audit = []; accts = []; acErr = ''; acBuilt = false; arch = []; archMap = {}; archErr = ''; vdBuilt = false; vdTo = ''; vd = { verified: [], failed: [], busy: false, ctrl: null, note: '', skipped: 0 }; acFilter = 'sin_perfil'; acQ = ''; lastCreated = null; staffBuilt = false; clearNewStu(); nsBuilt = false; show(true, false); };
+$('out').onclick = async () => { swept = false; await sb.auth.signOut(); $('msg').textContent = ''; me = null; kf = 'active'; usage = null; acSel.clear(); staffMap = {}; audit = []; accts = []; acErr = ''; acBuilt = false; arch = []; archMap = {}; archErr = ''; vdBuilt = false; vdTo = ''; vd = { verified: [], failed: [], busy: false, ctrl: null, note: '', skipped: 0 }; acFilter = 'sin_perfil'; acQ = ''; lastCreated = null; staffBuilt = false; clearNewStu(); nsBuilt = false; show(true, false); };
 $('out-top').onclick = () => $('out').onclick();
 $('re').onclick = load;
 $('q').oninput = $('g').onchange = $('pg').onchange = $('ac').onchange = render;
