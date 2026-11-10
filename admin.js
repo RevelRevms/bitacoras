@@ -34,6 +34,10 @@ const missesOf = (id, today) => { const from = shiftDay(today, -REINC_DIAS);
 
 const ERRS = {
   NO_AUTORIZADO: 'Esta cuenta no tiene permiso para esta acción (o está inactiva).',
+  MOTIVO_INVALIDO: 'El motivo debe tener entre 10 y 1000 caracteres.',
+  NOTA_NO_ENCONTRADA: 'No se encontró la nota.',
+  NO_ES_AMONESTACION: 'Solo se pueden eliminar amonestaciones, no observaciones.',
+  YA_ANULADA: 'Esa amonestación ya estaba eliminada.',
   SIN_CUENTAS: 'Seleccione al menos una cuenta.',
   DEMASIADAS_CUENTAS: 'Seleccione como máximo 200 cuentas a la vez.',
   CORREO_YA_EXISTE: 'Ya existe una cuenta con ese correo.',
@@ -764,12 +768,24 @@ function renderVids() {
 
 const mins = x => x.exit_at ? Math.max(0, Math.round((new Date(x.exit_at) - new Date(x.entry_at)) / 60000)) : 0;
 const dur = m => m ? `${Math.floor(m / 60)} h ${m % 60} min` : 'en curso';
+async function annulNote(n) {
+  const r = await ask({ title: 'Eliminar amonestación',
+    hint: `«${n.note.length > 140 ? n.note.slice(0, 140) + '…' : n.note}» El estudiante dejará de verla. Para auditoría, el personal la seguirá viendo tachada, con el motivo y quién la eliminó. No se puede deshacer.`,
+    label: 'Motivo (obligatorio)', min: 10, ok: 'Eliminar amonestación' });
+  if (!r) return;
+  const { error } = await sb.rpc('admin_annul_note', { p_note: n.id, p_reason: r.note });
+  if (error) alert(errText(error));
+  await load();
+}
 function noteRow(n) {
-  const lg = n.log_id ? logs.find(x => x.id === n.log_id) : null;
-  return h('div', { className: 'note ' + n.kind },
-    h('b', { textContent: n.kind === 'amonestacion' ? 'Amonestación' : 'Observación' }),
-    h('span', { className: 'd', textContent: fDT(n.created_at) + (v4 ? ` · por ${by(n.created_by)}` : '') + (lg ? ` · sobre la jornada del ${fD(lg.practice_date)}` : '') + (n.kind === 'amonestacion' ? ' · la ve el estudiante' : ' · privada') }),
-    h('p', { textContent: n.note }));
+  const lg = n.log_id ? logs.find(x => x.id === n.log_id) : null, anu = !!n.annulled_at;
+  const can = me?.role === 'admin' && n.kind === 'amonestacion' && !anu && 'annulled_at' in n;   // 'annulled_at' existe solo con migracion_v12
+  return h('div', { className: 'note ' + n.kind + (anu ? ' annulled' : '') },
+    h('b', { textContent: anu ? 'Amonestación eliminada' : n.kind === 'amonestacion' ? 'Amonestación' : 'Observación' }),
+    h('span', { className: 'd', textContent: fDT(n.created_at) + (v4 ? ` · por ${by(n.created_by)}` : '') + (lg ? ` · sobre la jornada del ${fD(lg.practice_date)}` : '') + (anu ? ' · el estudiante ya no la ve' : n.kind === 'amonestacion' ? ' · la ve el estudiante' : ' · privada') }),
+    h('p', { className: 'tx', textContent: n.note }),
+    anu ? h('p', { className: 'anu', textContent: `Eliminada el ${fDT(n.annulled_at)} por ${by(n.annulled_by)}. Motivo: ${n.annul_reason}` }) : '',
+    can ? h('button', { type: 'button', className: 'sec small', textContent: 'Eliminar amonestación', onclick: () => annulNote(n) }) : '');
 }
 function studentRow(s) {
   const today = todayGT(), D = viewDay(), isT = D === today;

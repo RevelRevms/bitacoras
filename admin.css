@@ -199,3 +199,4 @@ a.btn{display:inline-flex;align-items:center;min-height:46px;padding:10px 16px;f
 a.btn:hover{background:var(--field)}
 .who .hc{display:inline-block;color:var(--t);font-size:.8rem;overflow:visible}
 .hsum{grid-column:1/-1;padding:8px 10px;background:#e4f4ea;border-left:5px solid var(--ok)}.hsum span{display:block;font:700 1.15rem var(--head);color:#0f5a34}
+.note.annulled{background:#f1f3f8;border-left-color:var(--rule2)}.note.annulled .tx{text-decoration:line-through;color:var(--mut)}.note .anu{color:#7a1f1a;font-size:.86rem;font-weight:600;margin-top:4px}.note button.small{margin-top:6px;min-height:40px}

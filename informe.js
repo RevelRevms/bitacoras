@@ -65,7 +65,7 @@ function chart(rows) {
 function draw() {
   const A = L.filter(x => (!from || x.practice_date >= from) && (!to || x.practice_date <= to));
   const hs = Horas.summarize(A), inc = A.filter(x => x.has_incident), un = A.filter(x => x.status === 'unclosed' || (x.status === 'in_progress' && x.practice_date < todayGT())),
-    late = A.filter(x => x.closed_late), nn = N.filter(n => (!from || n.created_at.slice(0, 10) >= from) && (!to || n.created_at.slice(0, 10) <= to));
+    late = A.filter(x => x.closed_late), nn = N.filter(n => !n.annulled_at && (!from || n.created_at.slice(0, 10) >= from) && (!to || n.created_at.slice(0, 10) <= to));
   const rows = A.filter(x => x.status !== 'in_progress' || x.practice_date < todayGT()).map(x => ({ d: x.practice_date, m: Horas.minutes(x) }));
   const kp = (v, k, c = '') => h('div', { className: 'kp ' + c }, h('b', { textContent: v }), h('span', { textContent: k }));
   const lp = S.program, root = $('rep'); root.replaceChildren();

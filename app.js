@@ -74,7 +74,7 @@ async function route() {
     sb.from('admin_notes').select('*').eq('student_id', user.id).order('created_at', { ascending: false }),
     sb.from('rest_days').select('*').gte('rest_date', todayGT()).order('rest_date').limit(60)]);   // propios y generales (RLS)
   if (r2.error) return fail(r2.error);
-  myLogs = r2.data; log = myLogs[0]; myNotes = r3.error ? [] : (r3.data || []);
+  myLogs = r2.data; log = myLogs[0]; myNotes = r3.error ? [] : (r3.data || []).filter(n => !n.annulled_at);
   myRests = r4.error ? [] : dedupRests(r4.data || []);
   try { const ar = await sb.from('video_archive').select('log_id,removed_at').limit(2000);   // videos archivados (migracion_v8): ya no están en el servidor
     myArch = Object.fromEntries((ar.error ? [] : ar.data || []).filter(a => a.removed_at).map(a => [a.log_id, true])); } catch { myArch = {}; }
