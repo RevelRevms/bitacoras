@@ -277,7 +277,7 @@ function render() {
       h('button', { type: 'button', className: 'sec', ariaLabel: 'Día anterior', textContent: '‹', onclick: () => setDay(shiftDay(D, -1)) }),
       dIn,
       h('button', { type: 'button', className: 'sec', ariaLabel: 'Día siguiente', textContent: '›', disabled: isT, onclick: () => { const n = shiftDay(D, 1); setDay(n >= today ? '' : n); } }),
-      isT ? '' : h('button', { type: 'button', textContent: 'Volver a hoy', onclick: () => setDay('') })));
+      isT ? '' : h('button', { type: 'button', textContent: 'Hoy', onclick: () => setDay('') })));
 
   renderPending(today, byId);
   renderRest(today);
