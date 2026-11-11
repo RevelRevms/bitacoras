@@ -14,6 +14,7 @@ const mon = d => new Date(d.slice(0, 7) + '-15T12:00:00').toLocaleDateString('es
 const J = Horas.JORNADA_MIN, fHM = Horas.fHM;
 // «Volver» cierra esta pestaña (el panel sigue abierto en la otra). Si el navegador no deja cerrarla, abre el panel aquí.
 let HOME = 'admin.html', STUDENT = false;
+if (new URLSearchParams(location.search).get('embed')) document.documentElement.classList.add('embed');
 $('back').onclick = e => { e.preventDefault(); window.close(); setTimeout(() => { location.href = HOME; }, 250); };
 let AV = '', S = null, L = [], N = [], from = '', to = '', withText = true;
 

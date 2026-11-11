@@ -1,5 +1,8 @@
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
 const $ = id => document.getElementById(id), TZ = 'America/Guatemala';
+const sdlg = $('sdlg');
+const ovRoot = () => document.querySelector('dialog[open]') || document.body;   // los avisos deben ir DENTRO del diálogo abierto o quedarían detrás
+const unlock = () => { if (!sdlg.open && !document.querySelector('.vmodal,.dlg')) document.body.classList.remove('noscroll'); };
 // Reincidente = REINC_N o más jornadas sin cerrar a tiempo en los últimos REINC_DIAS días (ajuste estos dos números a su criterio).
 const REINC_N = 3, REINC_DIAS = 30;
 const PROG = { practica: 'Práctica Supervisada', prepractica: 'Prepráctica' };
@@ -18,7 +21,7 @@ const dias = n => `${n} ${n === 1 ? 'día' : 'días'}`;
 const fD = d => new Date(d + 'T12:00:00').toLocaleDateString('es-GT', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
 const fT = d => d ? new Date(d).toLocaleTimeString('es-GT', { timeZone: TZ, hour12: false }) : '—';
 const fDT = d => d ? new Date(d).toLocaleString('es-GT', { timeZone: TZ, hour12: false, day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—';
-const show = (login, app) => { $('login').classList.toggle('hidden', !login); $('app').classList.toggle('hidden', !app); $('hact').classList.toggle('hidden', !app); };
+const show = (login, app) => { $('login').classList.toggle('hidden', !login); $('app').classList.toggle('hidden', !app); $('hact').classList.toggle('hidden', !app); $('mb').classList.toggle('hidden', !app); if (!app) closeMenu(); };
 
 // ---- Quién hizo cada cosa ----
 const roleName = r => r === 'admin' ? 'Administrador' : r === 'supervisor' ? 'Supervisor' : 'Sin rol';
@@ -72,6 +75,7 @@ async function start() {
   if (r.data.active === false) { $('msg').textContent = 'Su cuenta de personal está inactiva. Hable con el administrador.'; return show(true, false); }
   me = { id: session.user.id, role, name: r.data.full_name || '' };
   $('go-mos').classList.toggle('hidden', role !== 'admin');   // el mosaico es solo del administrador
+  $('dme').textContent = v4 ? `${me.name || 'Sin nombre'} · ${role === 'admin' ? 'Administrador' : 'Supervisor'}` : '';
   $('me').textContent = v4 ? `Sesión: ${me.name || 'sin nombre'} · ${role === 'admin' ? 'Administrador' : 'Supervisor'}` : '';
   $('msg').textContent = ''; show(false, true); load();
 }
@@ -103,7 +107,9 @@ async function load() {
   $('msg').textContent = n.error || rd.error ? 'Algunas funciones no están disponibles (¿ya ejecutó migracion_v2.sql en Supabase?).'
     : v4 && sd.error ? 'No se pudo cargar el personal (¿ya ejecutó migracion_v4.sql en Supabase?).' : '';
   render(); sweepDeletedMedia();
+  if (!hashDone) { hashDone = true; const id = hashId(); if (id) openStudent(id, { push: false }); }
 }
+let hashDone = false;
 
 // ---- Avatares: enlaces firmados en un solo lote; se reutilizan mientras no estén por vencer ----
 async function loadAvatars() {
@@ -115,20 +121,21 @@ async function loadAvatars() {
 }
 const avUrl = s => s.avatar_path && avs[s.avatar_path]?.u || '';
 const ini = s => s.full_name.split(/\s+/).slice(0, 2).map(w => w[0]).join('').toUpperCase();
-function avatar(s, cls = 'mk') { const u = avUrl(s);
+function avatar(s, cls = 'mk', zoom = true) { const u = avUrl(s);
   if (!u) return h('div', { className: cls, textContent: ini(s) });
+  if (!zoom) return h('div', { className: cls + ' pic', style: `background-image:url("${u}")` });
   const open = e => { e.preventDefault(); e.stopPropagation(); viewAvatar(s, u, e.currentTarget); };   // dentro de <summary>: no abrir ni cerrar la tarjeta
   return h('div', { className: cls + ' pic zoom', role: 'button', tabIndex: 0, title: 'Ver foto', ariaLabel: 'Ver foto de ' + s.full_name, style: `background-image:url("${u}")`,
     onclick: open, onkeydown: e => { if (e.key === 'Enter' || e.key === ' ') open(e); } }); }
 function viewAvatar(s, url, from) {
   if (vm) return;
   const prev = from || document.activeElement;
-  const close = () => { document.removeEventListener('keydown', onKey); document.body.classList.remove('noscroll'); vm.remove(); vm = null; prev?.focus?.(); };
+  const close = () => { document.removeEventListener('keydown', onKey); vm.remove(); vm = null; unlock(); prev?.focus?.(); };
   const onKey = e => { if (e.key === 'Escape') close(); };
   const x1 = h('button', { type: 'button', className: 'vclose', textContent: '✕ Cerrar', onclick: close });
   vm = h('div', { className: 'vmodal av', role: 'dialog', ariaModal: 'true', ariaLabel: 'Foto de ' + s.full_name, onclick: e => { if (e.target === vm) close(); } },
     h('div', { className: 'vbar' }, h('span', { textContent: s.full_name }), x1), h('img', { src: url, alt: 'Foto de perfil de ' + s.full_name }));
-  document.body.append(vm); document.body.classList.add('noscroll'); document.addEventListener('keydown', onKey); x1.focus();
+  ovRoot().append(vm); document.body.classList.add('noscroll'); document.addEventListener('keydown', onKey); x1.focus();
 }
 async function setActive(s) {
   const on = !s.active;
@@ -165,7 +172,7 @@ function ask({ title, hint, label, kinds, min = 5, ok = 'Guardar' }) {
     let dlg;
     const onKey = e => { if (e.key === 'Escape') done(null); };
     const done = v => { document.removeEventListener('keydown', onKey); dlg.remove();
-      if (!document.querySelector('.vmodal')) document.body.classList.remove('noscroll');
+      unlock();
       prev?.focus?.(); res(v); };
     const form = h('form', { className: 'dlgbox', onsubmit: e => { e.preventDefault();
         const note = ta.value.trim();
@@ -176,7 +183,7 @@ function ask({ title, hint, label, kinds, min = 5, ok = 'Guardar' }) {
       h('div', { className: 'dlgacts' }, h('button', { type: 'button', className: 'sec', textContent: 'Cancelar', onclick: () => done(null) }),
         h('button', { type: 'submit', textContent: ok })));
     dlg = h('div', { className: 'dlg', role: 'dialog', ariaModal: 'true', ariaLabel: title }, form);
-    document.body.append(dlg); document.body.classList.add('noscroll'); document.addEventListener('keydown', onKey); ta.focus();
+    ovRoot().append(dlg); document.body.classList.add('noscroll'); document.addEventListener('keydown', onKey); ta.focus();
   });
 }
 async function closeUnclosed(x, who) {
@@ -232,14 +239,12 @@ async function addNote(s, x) {
   await load();
 }
 function focusStudent(id) {
-  kf = ''; $('q').value = ''; $('g').value = ''; render();
-  const d = $('stu-' + id);
-  if (d) { d.open = true; d.scrollIntoView?.({ behavior: 'smooth', block: 'start' }); }
+  kf = ''; $('q').value = ''; $('g').value = ''; setView('est'); render();
+  openStudent(id, { tab: 'jornadas' });
 }
 
-let vday = '', resetLogs = false;   // día consultado ('' = hoy)
-// Al cambiar de día se cierran las tarjetas y bitácoras abiertas antes; el estudiante se vuelve a abrir al tocarlo y solo trae abierta la del día elegido.
-const setDay = v => { vday = v; resetLogs = true; render(); };
+let vday = '';   // día consultado ('' = hoy)
+const setDay = v => { vday = v; render(); };
 const viewDay = () => vday || todayGT();
 function render() {
   const today = todayGT(), D = viewDay(), isT = D === today, byId = Object.fromEntries(students.map(s => [s.id, s]));
@@ -282,11 +287,11 @@ function render() {
   const cnt = days.map(d => logs.filter(x => x.practice_date === d).length), mx = Math.max(1, ...cnt);
   $('c-days').replaceChildren(h('div', { className: 'cols' }, days.map((d, i) =>
     h('button', { type: 'button', className: 'col' + (d === today ? ' now' : '') + (d === D ? ' pick' : ''), title: fD(d) + ': ' + cnt[i], ariaLabel: fD(d) + ': ' + cnt[i] + (cnt[i] === 1 ? ' bitácora' : ' bitácoras'), ariaPressed: String(d === D),
-      onclick: () => setDay(d >= today ? '' : d) }, String(cnt[i]), h('i', { style: `height:${cnt[i] / mx * 90}px` }), d.slice(8)))));
+      onclick: () => setDay(d >= today ? '' : d) }, String(cnt[i]), h('i', { style: `height:${cnt[i] / mx * 46}px` }), d.slice(8)))));
   const gr = {}; logs.forEach(x => { const g = byId[x.student_id]?.grade || '?'; gr[g] = (gr[g] || 0) + 1; });
   const gm = Math.max(1, ...Object.values(gr));
   $('c-grade').replaceChildren(...Object.entries(gr).map(([g, n]) =>
-    h('div', { className: 'hrow' }, h('span', { textContent: g }), h('i', { style: `width:${n / gm * 60}%` }), String(n))));
+    h('div', { className: 'hrow' }, h('span', { textContent: g }), h('i', { style: `width:${n / gm * 55}%` }), String(n))));
 
   const grades = [...new Set(students.map(s => s.grade))].sort(), sel = $('g'), cur = sel.value;
   sel.replaceChildren(h('option', { value: '', textContent: 'Todos los grados' }), ...grades.map(g => h('option', { value: g, textContent: g })));
@@ -295,11 +300,18 @@ function render() {
   const pf = $('pg').value, af = $('ac').value;
   const list = students.filter(s => (!sel.value || s.grade === sel.value) && (!pf || (pf === 'none' ? !s.program : s.program === pf)) && (!af || (af === 'on') === s.active) && (!kf || FILT[kf](s)) &&
     (`${s.full_name} ${s.practice_place} ${s.institution || ''} ${s.supervisor_name || ''} ${s.supervisor_contact || ''}`).toLowerCase().includes(q));
-  const openIds = new Set([...document.querySelectorAll('#list details[open]')].filter(d => !(resetLogs && (d.id.startsWith('log-') || d.id.startsWith('stu-')))).map(d => d.id)); resetLogs = false;   // conserva lo expandido
   const note = kf ? h('div', { className: 'fnote' }, `Filtro: ${NAMES[kf]}. ${list.length} ${list.length === 1 ? 'estudiante' : 'estudiantes'}.`,
     h('button', { type: 'button', className: 'sec', textContent: 'Quitar filtro', onclick: () => { kf = ''; render(); } })) : '';
-  $('list').replaceChildren(note, ...(list.length ? list.map(studentRow) : [h('p', { className: 'empty', textContent: 'Ningún estudiante coincide con los filtros.' })]));
-  $('list').querySelectorAll('details').forEach(d => { if (openIds.has(d.id)) d.open = true; });
+  const M = new Map(list.map(x => [x.id, metrics(x)]));
+  const sorted = [...list].sort((a, b) => { const va = SORTV[UI.sk](a, M.get(a.id)), vb = SORTV[UI.sk](b, M.get(b.id));
+    const c = typeof va === 'string' ? va.localeCompare(vb, 'es') : va - vb; return c ? c * UI.sd : a.full_name.localeCompare(b.full_name, 'es'); });
+  curList = sorted.map(x => x.id);
+  $('list').className = UI.view === 'table' ? 'tview' : 'cards';
+  $('vc').setAttribute('aria-pressed', String(UI.view !== 'table')); $('vt').setAttribute('aria-pressed', String(UI.view === 'table'));
+  const srt = $('srt'); if (!srt.options.length) srt.replaceChildren(...SORTS.map(([k, t]) => h('option', { value: k, textContent: 'Ordenar: ' + t }))); srt.value = UI.sk;
+  $('list').replaceChildren(note, ...(!sorted.length ? [h('p', { className: 'empty', textContent: 'Ningún estudiante coincide con los filtros.' })]
+    : UI.view === 'table' ? [studentTable(sorted, M)] : sorted.map(x => studentCard(x, M.get(x.id)))));
+  renderMenu(); renderDetail();
 }
 
 // ---- Tarjeta de pendientes: jornadas iniciadas y no cerradas ----
@@ -838,55 +850,216 @@ function noteRow(n) {
     anu ? h('p', { className: 'anu', textContent: `Eliminada el ${fDT(n.annulled_at)} por ${by(n.annulled_by)}. Motivo: ${n.annul_reason}` }) : '',
     can ? h('button', { type: 'button', className: 'sec small', textContent: 'Eliminar amonestación', onclick: () => annulNote(n) }) : '');
 }
-function studentRow(s) {
+// ================= Panel de estudiantes: tarjetas, tabla y ficha en diálogo =================
+let UI = { view: 'cards', sk: 'name', sd: 1 };
+try { Object.assign(UI, JSON.parse(localStorage.getItem('bitacora.admin.ui') || '{}')); } catch {}
+const saveUI = () => { try { localStorage.setItem('bitacora.admin.ui', JSON.stringify(UI)); } catch {} };
+let curList = [];
+const SORTS = [['name', 'Nombre'], ['grade', 'Grado'], ['state', 'Estado del día'], ['dayh', 'Horas del día'], ['tot', 'Horas totales'], ['over', 'Horas extra'], ['n', 'Bitácoras'], ['inc', 'Incidentes'], ['last', 'Última jornada']];
+const SORTV = {
+  name: s => s.full_name, grade: s => `${s.grade} ${s.section}`, state: (s, M) => M.st.rank, dayh: (s, M) => M.dm ?? -1,
+  tot: (s, M) => M.hs.total || 0, over: (s, M) => M.hs.over || 0, n: (s, M) => M.n, inc: (s, M) => M.inc, last: (s, M) => M.last ? Number(M.last.replace(/-/g, '')) : 0 };
+const TEXTKEYS = ['name', 'grade'];
+const defDir = k => TEXTKEYS.includes(k) || k === 'state' ? 1 : -1;
+function setSort(k) { if (UI.sk === k) UI.sd = -UI.sd; else { UI.sk = k; UI.sd = defDir(k); } saveUI(); render(); }
+
+// Estado del día de un estudiante (texto, color y orden para ordenar la tabla)
+function dayState(s, mine) {
   const today = todayGT(), D = viewDay(), isT = D === today;
-  const mine = logs.filter(x => x.student_id === s.id), inc = mine.filter(x => x.has_incident).length, n = mine.length;
-  const m = missesOf(s.id, today), rei = m.length >= REINC_N, sNotes = notes.filter(x => x.student_id === s.id);
   const tl = mine.find(x => x.practice_date === D), stale = mine.find(x => isStale(x, today));
-  const wd = new Date(D + 'T12:00:00Z').getUTCDay(), when = isT ? '' : ' ese día';
-  const led = !isT && tl?.status === 'in_progress' ? h('div', { className: 'led late', textContent: `Sin cerrar, entrada ${fT(tl.entry_at).slice(0, 5)}` })
-    : stale && isT ? h('div', { className: 'led late', textContent: `Sin cerrar desde hace ${dias(dayDiff(stale.practice_date, today))}` })
-    : tl?.status === 'submitted' ? h('div', { className: 'led done', textContent: `Completada${when}, salida ${fT(tl.exit_at).slice(0, 5)}` })
-    : tl?.status === 'unclosed' ? h('div', { className: 'led late', textContent: 'Jornada no concluida' })
-    : tl?.status === 'in_progress' ? h('div', { className: 'led on', textContent: `En jornada desde ${fT(tl.entry_at).slice(0, 5)}` })
-    : restFor(s.id, D) ? h('div', { className: 'led rest', textContent: `Día de descanso${isT ? ' hoy' : ''}` + (restFor(s.id, D).reason ? ': ' + restFor(s.id, D).reason : '') })
-    : !isT && s.active && wd !== 0 && wd !== 6 ? h('div', { className: 'led none', textContent: 'Sin bitácora ese día' }) : '';
-  const fact = (k, v) => h('div', {}, h('small', { textContent: k }), h('span', { textContent: v || '—' }));
-  const tools = h('div', { className: 'tools' },
-    rei ? h('div', { className: 'banner', textContent: `Reincidente: ${m.length} jornadas sin cerrar a tiempo en los últimos ${REINC_DIAS} días. Considere registrar una amonestación.` }) : '',
-    h('a', { className: 'btn sec', href: 'informe.html?s=' + s.id, target: '_blank', rel: 'noopener', textContent: 'Informe en PDF (carta)' }),
-    h('button', { type: 'button', className: 'sec', textContent: 'Registrar nota o amonestación', onclick: () => addNote(s) }),
-    h('button', { type: 'button', className: s.active ? 'sec' : '', textContent: s.active ? 'Inactivar estudiante' : 'Activar estudiante', onclick: () => setActive(s) }),
-    s.program ? h('button', { type: 'button', className: 'sec', textContent: `Pasar a ${progName(s.program === 'prepractica' ? 'practica' : 'prepractica')}`, onclick: () => setProgram(s) })
-      : h('button', { type: 'button', className: 'sec', textContent: 'Asignar Práctica Supervisada', onclick: () => setProgramFirst(s, 'practica') }),
-    !s.program ? h('button', { type: 'button', className: 'sec', textContent: 'Asignar Prepráctica', onclick: () => setProgramFirst(s, 'prepractica') }) : '');
-  const hs = Horas.summarize(mine), dm = Horas.minutes(tl);
-  const hrs = (dm !== null || hs.over) ? h('div', { className: 'hrs' },
-    dm !== null ? h('span', { className: 'hc ' + (dm >= Horas.JORNADA_MIN ? 'ok' : 'low'), title: dm >= Horas.JORNADA_MIN ? 'Jornada completa' : 'Jornada menor a 8 horas',
-      textContent: Horas.fHM(dm) + (isT ? ' hoy' : ' ese día') }) : '',
-    hs.over ? h('span', { className: 'hc xtra', title: 'Horas extra acumuladas: lo trabajado después de las 8 horas de cada día', textContent: '+' + Horas.fHM(hs.over) + ' extra' }) : '') : '';
-  const tel = (s.supervisor_contact || '').replace(/[^\d+]/g, '');
-  const rows = mine.map(x => { const r = logRow(x, s); if (x.practice_date === D && !isT) { r.classList.add('pick'); r.open = true; } return r; });
-  // Resumen compacto: nombre, grado, estado del día y total. Todo lo demás va al expandir.
-  return h('details', { className: 'stu' + (s.active ? '' : ' off'), id: 'stu-' + s.id }, h('summary', {}, avatar(s),
-    h('div', { className: 'who' }, h('b', { textContent: s.full_name }),
-      h('span', { className: 'gr' }, `${s.grade} ${s.section} `), h('span', { className: 'badges' }, h('span', { className: 'pg ' + (s.program || 'none'), textContent: progName(s.program) }), s.active ? '' : h('span', { className: 'pg off', textContent: 'Inactivo' })), led, hrs),
-    h('div', { className: 'cnt' }, h('b', { textContent: n }), h('small', { textContent: n === 1 ? 'bitácora' : 'bitácoras' }),
-      inc ? h('em', { textContent: inc === 1 ? '1 incidente' : inc + ' incidentes' }) : '',
-      m.length ? h('em', { className: rei ? 'rei' : 'warn', textContent: rei ? 'Reincidente' : `${m.length} sin cerrar` }) : ''),
-    h('span', { className: 'sign' })),
-    h('div', { className: 'inner' },
-      h('div', { className: 'facts' }, fact('Tipo de práctica', progName(s.program)), fact('Empresa o institución', s.institution), fact('Dirección de la empresa', s.practice_place),
-        fact('Encargado de la práctica', s.supervisor_name || 'Sin registrar'),
-        h('div', {}, h('small', { textContent: 'Contacto del encargado' }), s.supervisor_contact && tel ? h('a', { className: 'tel', href: 'tel:' + tel, textContent: s.supervisor_contact }) : h('span', { textContent: '—' })),
-        fact('Grado y sección', `${s.grade}, sección ${s.section}`),
-        h('div', { className: 'hsum' }, h('small', { textContent: 'Horas acumuladas del período de práctica' }),
-          h('span', { textContent: hs.days ? `${Horas.fHM(hs.total)} en ${dias(hs.days)}` + (hs.over ? ` (${Horas.fHM(hs.over)} son extra)` : '') : 'Sin jornadas completadas todavía' }))),
-      tools,
-      sNotes.length ? h('div', { className: 'notes' }, h('h4', { textContent: 'Notas del administrador' }), sNotes.map(noteRow)) : '',
-      n ? h('div', { className: 'trace' }, rows)
-        : h('p', { className: 'empty', textContent: 'Todavía no ha enviado bitácoras.' })));
+  const wd = new Date(D + 'T12:00:00Z').getUTCDay(), when = isT ? '' : ' ese día', rd = restFor(s.id, D);
+  const r = (cls, text, rank) => ({ cls, text, rank });
+  return !isT && tl?.status === 'in_progress' ? r('late', `Sin cerrar, entrada ${fT(tl.entry_at).slice(0, 5)}`, 0)
+    : stale && isT ? r('late', `Sin cerrar desde hace ${dias(dayDiff(stale.practice_date, today))}`, 0)
+    : tl?.status === 'submitted' ? r('done', `Completada${when}, salida ${fT(tl.exit_at).slice(0, 5)}`, 2)
+    : tl?.status === 'unclosed' ? r('late', 'Jornada no concluida', 0)
+    : tl?.status === 'in_progress' ? r('on', `En jornada desde ${fT(tl.entry_at).slice(0, 5)}`, 1)
+    : rd ? r('rest', `Día de descanso${isT ? ' hoy' : ''}` + (rd.reason ? ': ' + rd.reason : ''), 3)
+    : !isT && s.active && wd !== 0 && wd !== 6 ? r('none', 'Sin bitácora ese día', 4) : r('', '', 5);
 }
+function metrics(s) {
+  const today = todayGT(), mine = logs.filter(x => x.student_id === s.id), m = missesOf(s.id, today);
+  const tl = mine.find(x => x.practice_date === viewDay());
+  return { mine, n: mine.length, inc: mine.filter(x => x.has_incident).length, m, rei: m.length >= REINC_N, tl,
+    hs: Horas.summarize(mine), dm: Horas.minutes(tl), st: dayState(s, mine), last: mine.reduce((a, x) => x.practice_date > a ? x.practice_date : a, '') };
+}
+const ledEl = st => st.text ? h('div', { className: 'led ' + st.cls, textContent: st.text }) : '';
+function hrsEl(M) {
+  const isT = viewDay() === todayGT();
+  return (M.dm !== null || M.hs.over) ? h('div', { className: 'hrs' },
+    M.dm !== null ? h('span', { className: 'hc ' + (M.dm >= Horas.JORNADA_MIN ? 'ok' : 'low'), title: M.dm >= Horas.JORNADA_MIN ? 'Jornada completa' : 'Jornada menor a 8 horas',
+      textContent: Horas.fHM(M.dm) + (isT ? ' hoy' : ' ese día') }) : '',
+    M.hs.over ? h('span', { className: 'hc xtra', title: 'Horas extra acumuladas: lo trabajado después de las 8 horas de cada día', textContent: '+' + Horas.fHM(M.hs.over) + ' extra' }) : '') : '';
+}
+const badgesEl = s => h('span', { className: 'badges' }, h('span', { className: 'pg ' + (s.program || 'none'), textContent: progName(s.program) }), s.active ? '' : h('span', { className: 'pg off', textContent: 'Inactivo' }));
+const cntEl = M => h('div', { className: 'cnt' }, h('b', { textContent: M.n }), h('small', { textContent: M.n === 1 ? 'bitácora' : 'bitácoras' }),
+  M.inc ? h('em', { textContent: M.inc === 1 ? '1 incidente' : M.inc + ' incidentes' }) : '',
+  M.m.length ? h('em', { className: M.rei ? 'rei' : 'warn', textContent: M.rei ? 'Reincidente' : `${M.m.length} sin cerrar` }) : '');
+
+function studentCard(s, M) {
+  const open = () => openStudent(s.id, { from: card });
+  const card = h('div', { className: 'scard ' + M.st.cls + (s.active ? '' : ' off'), id: 'stu-' + s.id, tabIndex: 0, role: 'button', ariaLabel: 'Abrir la ficha de ' + s.full_name,
+    onclick: open, onkeydown: e => { if (e.target === card && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); open(); } } },
+    avatar(s, 'mk', false),
+    h('div', { className: 'who' }, h('b', { textContent: s.full_name }), h('span', { className: 'gr', textContent: `${s.grade} ${s.section}` }), badgesEl(s), ledEl(M.st), hrsEl(M)),
+    cntEl(M));
+  return card;
+}
+function studentTable(list, M) {
+  const COLS = [['name', 'Estudiante'], ['grade', 'Grado'], ['prog', 'Tipo'], ['state', 'Estado del día'], ['dayh', 'Horas del día'], ['tot', 'Horas totales'], ['over', 'Extras'], ['n', 'Bitácoras'], ['inc', 'Incidentes'], ['last', 'Última jornada']];
+  const th = ([k, t]) => { const sortable = k !== 'prog', on = UI.sk === k;
+    return h('th', { scope: 'col', ariaSort: on ? (UI.sd === 1 ? 'ascending' : 'descending') : 'none', className: 'c-' + k },
+      sortable ? h('button', { type: 'button', className: 'thb', onclick: () => setSort(k) }, t, h('i', { textContent: on ? (UI.sd === 1 ? ' ▲' : ' ▼') : '' })) : t); };
+  const hm = v => v ? Horas.fHM(v) : '—';
+  const rows = list.map(s => { const m = M.get(s.id), open = () => openStudent(s.id, { from: tr });
+    const tr = h('tr', { className: 'trow ' + m.st.cls + (s.active ? '' : ' off'), id: 'stu-' + s.id, tabIndex: 0, ariaLabel: 'Abrir la ficha de ' + s.full_name, onclick: open,
+      onkeydown: e => { if (e.target === tr && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); open(); } } },
+      h('th', { scope: 'row', className: 'c-name' }, h('div', { className: 'tn' }, avatar(s, 'mk sm', false), h('b', { textContent: s.full_name }), s.active ? '' : h('span', { className: 'pg off', textContent: 'Inactivo' }))),
+      h('td', { textContent: `${s.grade} ${s.section}` }),
+      h('td', {}, h('span', { className: 'pg ' + (s.program || 'none'), textContent: progName(s.program) })),
+      h('td', {}, m.st.text ? h('span', { className: 'led ' + m.st.cls, textContent: m.st.text }) : '—'),
+      h('td', { className: 'num' }, m.dm !== null ? h('span', { className: 'hc ' + (m.dm >= Horas.JORNADA_MIN ? 'ok' : 'low'), textContent: Horas.fHM(m.dm) }) : '—'),
+      h('td', { className: 'num', textContent: hm(m.hs.total) }),
+      h('td', { className: 'num' }, m.hs.over ? h('span', { className: 'hc xtra', textContent: '+' + Horas.fHM(m.hs.over) }) : '—'),
+      h('td', { className: 'num', textContent: m.n }),
+      h('td', { className: 'num' + (m.inc ? ' red' : ''), textContent: m.inc || '—' }),
+      h('td', { textContent: m.last ? fD(m.last) : '—' }));
+    return tr; });
+  return h('div', { className: 'tblwrap' }, h('table', { className: 'stbl' }, h('thead', {}, h('tr', {}, COLS.map(th))), h('tbody', {}, rows)));
+}
+
+// ---- Ficha del estudiante (diálogo) ----
+let openStu = null, pushed = false, sdOpener = null, escHad = false, lastKey = '';
+const hashId = () => (location.hash.match(/^#estudiante=(.+)$/) || [])[1] || '';
+function openStudent(id, o = {}) {
+  if (!students.some(z => z.id === id)) return;
+  const first = !sdlg.open;
+  openStu = { id, tab: o.tab || (first ? 'resumen' : openStu?.tab || 'resumen'), logId: null };
+  if (first) {
+    sdOpener = o.from || document.activeElement; sdlg.showModal(); document.body.classList.add('noscroll');
+    if (o.push === false) pushed = !!history.state?.stu; else { history.pushState({ stu: id }, '', '#estudiante=' + id); pushed = true; }
+  } else if (o.nav) history.replaceState({ stu: id }, '', '#estudiante=' + id);
+  renderDetail(true);
+}
+function closeStudent() { if (pushed) history.back(); else sdlg.close(); }
+sdlg.addEventListener('close', () => {
+  sdlg.querySelectorAll('.vmodal,.dlg').forEach(n => n.remove()); vm = null;
+  if (!pushed && hashId()) history.replaceState(null, '', location.pathname + location.search);
+  pushed = false; openStu = null; lastKey = ''; $('spanel').replaceChildren(); unlock(); sdOpener?.focus?.();
+});
+window.addEventListener('popstate', () => {
+  const id = hashId();
+  if (id && students.some(z => z.id === id)) { if (!sdlg.open || openStu?.id !== id) openStudent(id, { push: false }); }
+  else if (sdlg.open) { pushed = false; sdlg.close(); }
+});
+sdlg.addEventListener('cancel', e => { e.preventDefault(); if (escHad) { escHad = false; return; } closeStudent(); });
+let mdown = false;
+sdlg.addEventListener('mousedown', e => { mdown = e.target === sdlg; });
+sdlg.addEventListener('click', e => { if (mdown && e.target === sdlg && !sdlg.querySelector('.vmodal,.dlg')) closeStudent(); mdown = false; });
+const stuNav = d => { const i = curList.indexOf(openStu?.id), j = i + d; if (i < 0 || j < 0 || j >= curList.length) return; openStudent(curList[j], { nav: true }); };
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') { escHad = !!document.querySelector('.vmodal,.dlg'); if ($('drawer').classList.contains('open')) closeMenu(); }
+  if (sdlg.open && (e.key === 'ArrowLeft' || e.key === 'ArrowRight') && !e.altKey && !e.ctrlKey && !e.metaKey && !sdlg.querySelector('.vmodal,.dlg')
+    && !/^(INPUT|TEXTAREA|SELECT|VIDEO|IFRAME)$/.test(document.activeElement?.tagName || '')) stuNav(e.key === 'ArrowLeft' ? -1 : 1);
+}, true);
+matchMedia('(min-width:900px)').addEventListener?.('change', () => renderDetail());
+
+const TABS = [['resumen', 'Resumen'], ['jornadas', 'Jornadas'], ['notas', 'Notas'], ['informe', 'Informe']];
+function renderDetail(force) {
+  if (!openStu) return;
+  const s = students.find(z => z.id === openStu.id);
+  if (!s) return closeStudent();
+  const M = metrics(s), sNotes = notes.filter(x => x.student_id === s.id), i = curList.indexOf(s.id), tab = openStu.tab;
+  $('shead').replaceChildren(avatar(s, 'mk lg'),
+    h('div', { className: 'who' }, h('b', { id: 'sname', textContent: s.full_name }), h('span', { className: 'gr', textContent: `${s.grade}, sección ${s.section}` }), badgesEl(s), ledEl(M.st), hrsEl(M)),
+    h('div', { className: 'snav' },
+      h('button', { type: 'button', className: 'sec', ariaLabel: 'Estudiante anterior', title: 'Anterior (←)', textContent: '‹', disabled: i <= 0, onclick: () => stuNav(-1) }),
+      h('span', { className: 'pos', textContent: i < 0 ? '' : `${i + 1} de ${curList.length}` }),
+      h('button', { type: 'button', className: 'sec', ariaLabel: 'Estudiante siguiente', title: 'Siguiente (→)', textContent: '›', disabled: i < 0 || i >= curList.length - 1, onclick: () => stuNav(1) }),
+      h('button', { type: 'button', className: 'sec sclose', textContent: '✕ Cerrar', onclick: closeStudent })));
+  const label = { resumen: 'Resumen', jornadas: `Jornadas (${M.n})`, notas: `Notas (${sNotes.length})`, informe: 'Informe' };
+  $('stabs').replaceChildren(...TABS.map(([k]) => h('button', { type: 'button', role: 'tab', className: 'tab' + (k === tab ? ' on' : ''), ariaSelected: String(k === tab), textContent: label[k],
+    onclick: () => { openStu.tab = k; renderDetail(true); } })));
+  const panel = $('spanel'), key = s.id + '|' + tab;
+  if (tab === 'informe' && lastKey === key && !force) return;   // no recargar el informe cada vez que se actualizan los datos
+  const top = lastKey === key ? panel.scrollTop : 0, jl = panel.querySelector('.jlist'), jtop = jl ? jl.scrollTop : 0;
+  panel.dataset.k = lastKey = key;
+  panel.replaceChildren(tab === 'resumen' ? tabResumen(s, M) : tab === 'jornadas' ? tabJornadas(s, M) : tab === 'notas' ? tabNotas(s, sNotes) : tabInforme(s));
+  panel.scrollTop = top; const jl2 = panel.querySelector('.jlist'); if (jl2) jl2.scrollTop = jtop;
+}
+function tabResumen(s, M) {
+  const fact = (k, v) => h('div', {}, h('small', { textContent: k }), h('span', { textContent: v || '—' })), tel = (s.supervisor_contact || '').replace(/[^\d+]/g, ''), hs = M.hs;
+  return h('div', { className: 'inner' },
+    M.rei ? h('div', { className: 'banner', textContent: `Reincidente: ${M.m.length} jornadas sin cerrar a tiempo en los últimos ${REINC_DIAS} días. Considere registrar una amonestación.` }) : '',
+    h('div', { className: 'facts' }, fact('Tipo de práctica', progName(s.program)), fact('Empresa o institución', s.institution), fact('Dirección de la empresa', s.practice_place),
+      fact('Encargado de la práctica', s.supervisor_name || 'Sin registrar'),
+      h('div', {}, h('small', { textContent: 'Contacto del encargado' }), s.supervisor_contact && tel ? h('a', { className: 'tel', href: 'tel:' + tel, textContent: s.supervisor_contact }) : h('span', { textContent: '—' })),
+      fact('Grado y sección', `${s.grade}, sección ${s.section}`),
+      h('div', { className: 'hsum' }, h('small', { textContent: 'Horas acumuladas del período de práctica' }),
+        h('span', { textContent: hs.days ? `${Horas.fHM(hs.total)} en ${dias(hs.days)}` + (hs.over ? ` (${Horas.fHM(hs.over)} son extra)` : '') : 'Sin jornadas completadas todavía' }))),
+    h('div', { className: 'tools' },
+      h('a', { className: 'btn sec', href: 'informe.html?s=' + s.id, target: '_blank', rel: 'noopener', textContent: 'Informe en PDF (carta)' }),
+      h('button', { type: 'button', className: 'sec', textContent: 'Registrar nota o amonestación', onclick: () => addNote(s) }),
+      h('button', { type: 'button', className: s.active ? 'sec' : '', textContent: s.active ? 'Inactivar estudiante' : 'Activar estudiante', onclick: () => setActive(s) }),
+      s.program ? h('button', { type: 'button', className: 'sec', textContent: `Pasar a ${progName(s.program === 'prepractica' ? 'practica' : 'prepractica')}`, onclick: () => setProgram(s) })
+        : h('button', { type: 'button', className: 'sec', textContent: 'Asignar Práctica Supervisada', onclick: () => setProgramFirst(s, 'practica') }),
+      !s.program ? h('button', { type: 'button', className: 'sec', textContent: 'Asignar Prepráctica', onclick: () => setProgramFirst(s, 'prepractica') }) : ''));
+}
+function tabJornadas(s, M) {
+  if (!M.n) return h('p', { className: 'empty pad', textContent: 'Todavía no ha enviado bitácoras.' });
+  const D = viewDay(), isT = D === todayGT(), wide = matchMedia('(min-width:900px)').matches;
+  let sel = M.mine.find(x => x.id === openStu.logId);
+  if (!sel && wide) sel = (!isT && M.mine.find(x => x.practice_date === D)) || M.mine[0];
+  openStu.logId = sel?.id || null;
+  const list = h('div', { className: 'jlist' }, M.mine.map(x => { const p = logHead(x, s);
+    return h('button', { type: 'button', className: 'jrow' + (x === sel ? ' sel' : '') + (p.inc ? ' inc' : '') + (!isT && x.practice_date === D ? ' pick' : ''), ariaCurrent: String(x === sel),
+      onclick: () => { openStu.logId = x.id; renderDetail(true); } },
+      h('time', { textContent: p.date }), h('div', { className: 'who' }, h('b', { textContent: p.title }), h('span', { textContent: p.sub }), p.marks)); }));
+  const det = h('div', { className: 'jdet' }, sel ? [
+    h('button', { type: 'button', className: 'sec jback', textContent: '‹ Todas las jornadas', onclick: () => { openStu.logId = null; renderDetail(true); } }),
+    h('h3', { textContent: logHead(sel, s).full }), logBody(sel, s)] : '');
+  return h('div', { className: 'jsplit' + (sel ? ' hasdet' : '') }, list, det);
+}
+function tabNotas(s, sNotes) {
+  return h('div', { className: 'inner' },
+    h('div', { className: 'tools' }, h('button', { type: 'button', textContent: 'Registrar nota o amonestación', onclick: () => addNote(s) })),
+    sNotes.length ? h('div', { className: 'notes' }, sNotes.map(noteRow)) : h('p', { className: 'empty', textContent: 'No hay notas ni amonestaciones para este estudiante.' }));
+}
+function tabInforme(s) {
+  return h('div', { className: 'ifw' },
+    h('div', { className: 'ifbar' }, h('span', { className: 'sub', textContent: 'Vista previa del informe. Para imprimirlo o guardarlo como PDF ábralo en su propia pestaña.' }),
+      h('a', { className: 'btn sec', href: 'informe.html?s=' + s.id, target: '_blank', rel: 'noopener', textContent: 'Abrir para imprimir' })),
+    h('iframe', { className: 'ifr', src: 'informe.html?s=' + s.id + '&embed=1', title: 'Informe de ' + s.full_name }));
+}
+
+// ---- Menú de secciones (hamburguesa) ----
+const VSEC = { est: 'v-est', rest: 'rest', staff: 'staff', newstu: 'newstu', accts: 'accts', vids: 'vids' };
+let curView = 'est';
+const viewLabel = v => v === 'est' ? 'Estudiantes' : ($(VSEC[v] + '-sum') || $(VSEC[v]).querySelector('h2'))?.textContent || v;
+function setView(v) {
+  if (!VSEC[v] || $(VSEC[v]).classList.contains('hidden')) v = 'est';
+  curView = v; Object.entries(VSEC).forEach(([k, id]) => $(id).classList.toggle('on', k === v));
+  $('vname').textContent = viewLabel(v); renderMenu(); closeMenu(); window.scrollTo?.(0, 0);
+}
+function renderMenu() {
+  if ($(VSEC[curView]).classList.contains('hidden')) { curView = 'est'; Object.entries(VSEC).forEach(([k, id]) => $(id).classList.toggle('on', k === 'est')); }
+  $('vname').textContent = viewLabel(curView);
+  const items = Object.keys(VSEC).filter(v => !$(VSEC[v]).classList.contains('hidden')).map(v => h('button', { type: 'button', className: 'mi' + (v === curView ? ' on' : ''), ariaCurrent: v === curView ? 'page' : 'false',
+    textContent: viewLabel(v), onclick: () => setView(v) }));
+  if (me?.role === 'admin') items.push(h('a', { className: 'mi', href: 'mosaico.html', textContent: 'Mosaico de videos' }));
+  $('dmenu').replaceChildren(...items);
+}
+function openMenu() { $('drawer').hidden = false; $('scrim').classList.remove('hidden'); requestAnimationFrame(() => $('drawer').classList.add('open'));
+  $('mb').setAttribute('aria-expanded', 'true'); document.body.classList.add('noscroll'); setTimeout(() => $('dmenu').querySelector('.mi.on, .mi')?.focus(), 0); }
+function closeMenu() { const d = $('drawer'); if (d.hidden) return; d.classList.remove('open'); d.hidden = true; $('scrim').classList.add('hidden');
+  $('mb').setAttribute('aria-expanded', 'false'); unlock(); }
+$('mb').onclick = () => $('drawer').hidden ? openMenu() : closeMenu();
+$('dclose').onclick = () => { closeMenu(); $('mb').focus(); };
+$('scrim').onclick = closeMenu;
+$('vc').onclick = () => { UI.view = 'cards'; saveUI(); render(); };
+$('vt').onclick = () => { UI.view = 'table'; saveUI(); render(); };
+$('srt').onchange = e => { UI.sk = e.target.value; UI.sd = defDir(UI.sk); saveUI(); render(); };
+$('chartbox').open = matchMedia('(min-width:900px)').matches;
 // ---- Visor de video a pantalla completa ----
 let vm;
 const openVideo = (x, btn) => openMedia(x, btn, 'video');
@@ -902,20 +1075,20 @@ async function openMedia(x, btn, kind) {
   const v = photo ? h('img', { src: url, alt: 'Foto de inicio de jornada' }) : h('video', { src: url, controls: true, autoplay: true, playsInline: true });
   const close = () => { if (!photo) { v.pause(); v.removeAttribute('src'); v.load(); } else v.removeAttribute('src');
     if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
-    document.removeEventListener('keydown', onKey); document.body.classList.remove('noscroll');
-    vm.remove(); vm = null; prev?.focus?.(); };
+    document.removeEventListener('keydown', onKey);
+    vm.remove(); vm = null; unlock(); prev?.focus?.(); };
   const onKey = e => { if (e.key === 'Escape') close(); };
   const x1 = h('button', { type: 'button', className: 'vclose', textContent: '✕ Cerrar', onclick: close });
   vm = h('div', { className: 'vmodal', role: 'dialog', ariaModal: 'true', ariaLabel: photo ? 'Foto de inicio' : 'Video de evidencia' },
     h('div', { className: 'vbar' }, h('span', { textContent: (photo ? 'Foto de inicio · ' : '') + fD(x.practice_date) }),
       h('a', { href: url, target: '_blank', rel: 'noopener', textContent: 'Abrir o descargar' }), x1), v);
-  document.body.append(vm); document.body.classList.add('noscroll'); document.addEventListener('keydown', onKey);
+  ovRoot().append(vm); document.body.classList.add('noscroll'); document.addEventListener('keydown', onKey);
   x1.focus();
   if (vm.requestFullscreen) vm.requestFullscreen().catch(() => {});   // pantalla completa real si el navegador lo permite
   vm.addEventListener('fullscreenchange', () => { if (!document.fullscreenElement && vm) close(); });
 }
 const lp0 = (x, s) => x.program || s?.program || '';
-function logRow(x, s) {
+function logBody(x, s) {
   const today = todayGT(), stale = isStale(x, today), un = x.status === 'unclosed', late = x.closed_late === true;
   const body = h('dl', { className: 'body' });
   const row = (k, v, c = '') => { if (!v) return; const d = h('dd', { textContent: v }); body.append(h('dt', { className: c, textContent: k }), d); };
@@ -947,25 +1120,26 @@ function logRow(x, s) {
     stale ? h('button', { type: 'button', textContent: 'Cerrar como no concluida', onclick: () => closeUnclosed(x, s.full_name) }) : '',
     (stale || un || late) ? h('button', { type: 'button', className: 'sec', textContent: 'Nota o amonestación sobre esta jornada', onclick: () => addNote(s, x) }) : '',
     canDel ? h('button', { type: 'button', className: 'sec delbtn', textContent: 'Eliminar jornada', onclick: () => deleteLog(x, s) }) : ''));
+  return body;
+}
+function logHead(x, s) {
+  const today = todayGT(), stale = isStale(x, today), un = x.status === 'unclosed', late = x.closed_late === true;
   const d = new Date(x.practice_date + 'T12:00:00');
   const title = x.main_activity || (un ? 'Jornada no concluida' : stale ? 'Jornada sin cerrar' : 'Jornada en curso');
   const sub = un ? `Entrada ${fT(x.entry_at)}, sin hora de salida`
     : stale ? `Entrada ${fT(x.entry_at)}, sin hora de salida (hace ${dias(dayDiff(x.practice_date, today))})`
     : late ? `Entrada ${fT(x.entry_at)}, enviada con retraso`
     : `Entrada ${fT(x.entry_at)}, salida ${fT(x.exit_at)} (${Horas.minutes(x) !== null ? Horas.fHM(Horas.minutes(x)) + ' sin almuerzo' : dur(mins(x))})`;
-  return h('details', { className: 'log' + (x.has_incident || stale || un ? ' inc' : ''), id: 'log-' + x.id }, h('summary', {},
-    h('time', { textContent: d.toLocaleDateString('es-GT', { weekday: 'short', day: 'numeric', month: 'short' }) }),
-    h('div', { className: 'who' }, h('b', { textContent: title }), h('span', { textContent: sub })),
-    h('div', { className: 'marks' }, stale ? h('em', { textContent: 'Sin cerrar' }) : '', un ? h('em', { textContent: 'No concluida' }) : '',
-      late ? h('em', { className: 'warn', textContent: 'Cierre tardío' }) : '',
-      x.has_incident ? h('em', { textContent: 'Incidente' }) : '', x.start_photo_path ? h('span', { textContent: pArchMap[x.id]?.removed_at ? 'Foto archivada' : 'Foto' }) : '', x.video_path ? h('span', { textContent: archMap[x.id]?.removed_at ? 'Video archivado' : 'Video' }) : '',
-      lp0(x, s) ? h('span', { className: 'pg ' + lp0(x, s), textContent: progName(lp0(x, s)) }) : ''),
-    h('span', { className: 'sign' })), body);
+  const d0 = d.toLocaleDateString('es-GT', { weekday: 'short', day: 'numeric', month: 'short' });
+  const marks = h('div', { className: 'marks2' }, stale ? h('em', { textContent: 'Sin cerrar' }) : '', un ? h('em', { textContent: 'No concluida' }) : '',
+    late ? h('em', { className: 'warn', textContent: 'Cierre tardío' }) : '',
+    x.has_incident ? h('em', { textContent: 'Incidente' }) : '', x.start_photo_path ? h('span', { textContent: pArchMap[x.id]?.removed_at ? 'Foto archivada' : 'Foto' }) : '', x.video_path ? h('span', { textContent: archMap[x.id]?.removed_at ? 'Video archivado' : 'Video' }) : '');
+  return { date: d0, full: fD(x.practice_date), title, sub, marks, inc: !!(x.has_incident || stale || un) };
 }
 $('login').onsubmit = async e => { e.preventDefault();
   const { error } = await sb.auth.signInWithPassword({ email: $('em').value, password: $('pw').value });
   if (error) return $('msg').textContent = 'Credenciales incorrectas.'; start(); };
-$('out').onclick = async () => { swept = false; await sb.auth.signOut(); $('msg').textContent = ''; me = null; kf = 'active'; usage = null; acSel.clear(); staffMap = {}; audit = []; accts = []; acErr = ''; acBuilt = false; arch = []; archMap = {}; archErr = ''; vdBuilt = false; vdTo = ''; vd = { verified: [], failed: [], busy: false, ctrl: null, note: '', skipped: 0 }; acFilter = 'sin_perfil'; acQ = ''; lastCreated = null; staffBuilt = false; clearNewStu(); nsBuilt = false; show(true, false); };
+$('out').onclick = async () => { swept = false; hashDone = false; if (sdlg.open) { pushed = false; sdlg.close(); } closeMenu(); setView('est'); await sb.auth.signOut(); $('msg').textContent = ''; me = null; kf = 'active'; usage = null; acSel.clear(); staffMap = {}; audit = []; accts = []; acErr = ''; acBuilt = false; arch = []; archMap = {}; archErr = ''; vdBuilt = false; vdTo = ''; vd = { verified: [], failed: [], busy: false, ctrl: null, note: '', skipped: 0 }; acFilter = 'sin_perfil'; acQ = ''; lastCreated = null; staffBuilt = false; clearNewStu(); nsBuilt = false; show(true, false); };
 $('out-top').onclick = () => $('out').onclick();
 $('re').onclick = load;
 $('q').oninput = $('g').onchange = $('pg').onchange = $('ac').onchange = render;

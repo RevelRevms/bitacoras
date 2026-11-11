@@ -1,26 +1,31 @@
 <!DOCTYPE html>
 <html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Panel administrativo - Bitácora</title><link rel="stylesheet" href="admin.css?v=30"></head><body><header class="top"><h1>Bitácora<span>panel de supervisión</span></h1><div id="me" class="sub"></div><div id="hact" class="hact hidden"><a id="go-mos" class="gomos hidden" href="mosaico.html">Mosaico de videos</a><button type="button" id="out-top" class="gomos salir">Salir</button></div></header><main>
+<title>Panel administrativo - Bitácora</title><link rel="stylesheet" href="admin.css?v=31"></head><body><header class="top"><div class="brand"><button type="button" id="mb" class="mb hidden" aria-label="Abrir menú" aria-expanded="false" aria-controls="drawer"><span></span><span></span><span></span></button><h1>Bitácora<span>panel de supervisión</span></h1><div id="vname" class="vname"></div></div><div id="me" class="sub"></div><div id="hact" class="hact hidden"><a id="go-mos" class="gomos hidden" href="mosaico.html">Mosaico de videos</a><button type="button" id="out-top" class="gomos salir">Salir</button></div></header>
+<div id="scrim" class="scrim hidden"></div>
+<nav id="drawer" class="drawer" aria-label="Secciones del panel" hidden><div class="dhead"><b>Menú</b><button type="button" id="dclose" class="sec" aria-label="Cerrar menú">✕</button></div><div id="dme" class="dme"></div><div id="dmenu" class="dmenu"></div><div class="dfoot"><button id="re" class="sec" type="button">Actualizar datos</button><button id="out" class="sec" type="button">Salir</button></div></nav>
+<main>
 <div id="msg" class="err"></div>
 <form id="login" class="card hidden"><h2 class="cover">Panel de supervisión</h2><p class="info">Entre con el correo y la contraseña de su cuenta de administrador o supervisor.</p>
 <label for="em">Correo</label><input id="em" type="email" required autocomplete="username">
 <label for="pw">Contraseña</label><input id="pw" type="password" required autocomplete="current-password">
 <button>Entrar</button></form>
 <div id="app" class="hidden">
+<section id="v-est" class="vsec on">
 <div id="daybar" class="daybar"></div><div class="kpis" id="kpis"></div>
 <div id="restbar" class="restbar hidden"></div>
 <div id="pend" class="card pend hidden"></div>
-<details id="rest" class="card restcard"><summary><h2 id="rest-sum">Días de descanso</h2></summary>
+<details id="chartbox" class="chartbox"><summary>Actividad reciente</summary><div class="charts"><div><h3>Bitácoras por día, últimos 14 días</h3><div id="c-days"></div></div><div><h3>Bitácoras por grado</h3><div id="c-grade"></div></div></div></details>
+<div class="bar"><input id="q" type="search" placeholder="Buscar estudiante o empresa…" aria-label="Buscar"><select id="g" aria-label="Grado"><option value="">Todos los grados</option></select><select id="pg" title="Tipo de práctica" aria-label="Tipo de práctica"><option value="">Todos los tipos</option><option value="practica">Práctica Supervisada</option><option value="prepractica">Prepráctica</option><option value="none">Sin definir</option></select><select id="ac" title="Estado" aria-label="Estado"><option value="">Activos e inactivos</option><option value="on">Solo activos</option><option value="off">Solo inactivos</option></select><select id="srt" title="Ordenar por" aria-label="Ordenar por"></select><div class="seg" role="group" aria-label="Vista"><button type="button" id="vc" aria-pressed="true">Tarjetas</button><button type="button" id="vt" aria-pressed="false">Tabla</button></div></div>
+<div id="list" class="cards"></div>
+</section>
+<section id="rest" class="vsec card"><h2 id="rest-sum">Días de descanso</h2>
 <p class="sub">Marque los días laborables en que no hay práctica. Ese día el estudiante no puede iniciar jornada y verá el aviso en su pantalla.</p>
-<div id="rest-form"></div><div id="rest-list"></div></details>
-<details id="staff" class="card restcard hidden"><summary><h2 id="staff-sum">Personal y actividad</h2></summary><div id="staff-body"></div></details>
-<details id="newstu" class="card restcard hidden"><summary><h2>Crear cuentas de estudiantes</h2></summary><div id="newstu-body"></div></details>
-<details id="accts" class="card restcard hidden"><summary><h2 id="accts-sum">Cuentas</h2></summary><div id="accts-body"></div></details>
-<details id="vids" class="card restcard hidden"><summary><h2 id="vids-sum">Videos, fotos y espacio</h2></summary><div id="vids-body"></div></details>
-<div class="charts"><div class="card"><h2>Bitácoras por día, últimos 14 días</h2><p class="sub">Toque una barra para ver ese día.</p><div id="c-days"></div></div>
-<div class="card"><h2>Bitácoras por grado</h2><div id="c-grade"></div></div></div>
-<div class="bar"><input id="q" placeholder="Buscar estudiante o empresa…"><select id="g"><option value="">Todos los grados</option></select><select id="pg" title="Tipo de práctica"><option value="">Todos los tipos</option><option value="practica">Práctica Supervisada</option><option value="prepractica">Prepráctica</option><option value="none">Sin definir</option></select><select id="ac" title="Estado"><option value="">Activos e inactivos</option><option value="on">Solo activos</option><option value="off">Solo inactivos</option></select>
-<button id="re" class="sec">Actualizar</button><button id="out" class="sec">Salir</button></div>
-<div id="list"></div></div></main>
+<div id="rest-form"></div><div id="rest-list"></div></section>
+<section id="staff" class="vsec card hidden"><h2 id="staff-sum">Personal y actividad</h2><div id="staff-body"></div></section>
+<section id="newstu" class="vsec card hidden"><h2>Crear cuentas de estudiantes</h2><div id="newstu-body"></div></section>
+<section id="accts" class="vsec card hidden"><h2 id="accts-sum">Cuentas</h2><div id="accts-body"></div></section>
+<section id="vids" class="vsec card hidden"><h2 id="vids-sum">Videos, fotos y espacio</h2><div id="vids-body"></div></section>
+</div></main>
+<dialog id="sdlg" class="sdlg" aria-labelledby="sname"><div id="shead" class="shead"></div><div id="stabs" class="stabs" role="tablist"></div><div id="spanel" class="spanel"></div></dialog>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="ojo.js?v=3"></script><script src="supabase-config.js?v=8"></script><script src="horas.js?v=2"></script><script src="admin.js?v=34"></script></body></html>
+<script src="ojo.js?v=3"></script><script src="supabase-config.js?v=8"></script><script src="horas.js?v=2"></script><script src="admin.js?v=35"></script></body></html>
