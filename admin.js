@@ -74,7 +74,7 @@ async function start() {
   if (role !== 'admin' && !(v4 && role === 'supervisor')) { $('msg').textContent = 'Esta cuenta no tiene permisos de administrador ni de supervisor.'; return show(true, false); }
   if (r.data.active === false) { $('msg').textContent = 'Su cuenta de personal está inactiva. Hable con el administrador.'; return show(true, false); }
   me = { id: session.user.id, role, name: r.data.full_name || '' };
-  $('go-mos').classList.toggle('hidden', role !== 'admin');   // el mosaico es solo del administrador
+  $('mos').classList.toggle('hidden', role !== 'admin');   // el mosaico es solo del administrador
   $('dme').textContent = v4 ? `${me.name || 'Sin nombre'} · ${role === 'admin' ? 'Administrador' : 'Supervisor'}` : '';
   $('me').textContent = v4 ? `Sesión: ${me.name || 'sin nombre'} · ${role === 'admin' ? 'Administrador' : 'Supervisor'}` : '';
   $('msg').textContent = ''; show(false, true); load();
@@ -107,7 +107,7 @@ async function load() {
   $('msg').textContent = n.error || rd.error ? 'Algunas funciones no están disponibles (¿ya ejecutó migracion_v2.sql en Supabase?).'
     : v4 && sd.error ? 'No se pudo cargar el personal (¿ya ejecutó migracion_v4.sql en Supabase?).' : '';
   render(); sweepDeletedMedia();
-  if (!hashDone) { hashDone = true; const id = hashId(); if (id) openStudent(id, { push: false }); }
+  if (!hashDone) { hashDone = true; const id = hashId(); if (id) openStudent(id, { push: false }); else if (location.hash === '#mosaico' && me?.role === 'admin') setView('mos'); }
 }
 let hashDone = false;
 
@@ -277,7 +277,7 @@ function render() {
       h('button', { type: 'button', className: 'sec', ariaLabel: 'Día anterior', textContent: '‹', onclick: () => setDay(shiftDay(D, -1)) }),
       dIn,
       h('button', { type: 'button', className: 'sec', ariaLabel: 'Día siguiente', textContent: '›', disabled: isT, onclick: () => { const n = shiftDay(D, 1); setDay(n >= today ? '' : n); } }),
-      isT ? '' : h('button', { type: 'button', textContent: 'Hoy', onclick: () => setDay('') })));
+      isT ? '' : h('button', { type: 'button', textContent: 'Volver a hoy', onclick: () => setDay('') })));
 
   renderPending(today, byId);
   renderRest(today);
@@ -1033,20 +1033,20 @@ function tabInforme(s) {
 }
 
 // ---- Menú de secciones (hamburguesa) ----
-const VSEC = { est: 'v-est', rest: 'rest', staff: 'staff', newstu: 'newstu', accts: 'accts', vids: 'vids' };
+const VSEC = { est: 'v-est', rest: 'rest', staff: 'staff', newstu: 'newstu', accts: 'accts', vids: 'vids', mos: 'mos' };
 let curView = 'est';
-const viewLabel = v => v === 'est' ? 'Estudiantes' : ($(VSEC[v] + '-sum') || $(VSEC[v]).querySelector('h2'))?.textContent || v;
+const viewLabel = v => v === 'mos' ? 'Mosaico de videos' : v === 'est' ? 'Estudiantes' : ($(VSEC[v] + '-sum') || $(VSEC[v]).querySelector('h2'))?.textContent || v;
 function setView(v) {
   if (!VSEC[v] || $(VSEC[v]).classList.contains('hidden')) v = 'est';
   curView = v; Object.entries(VSEC).forEach(([k, id]) => $(id).classList.toggle('on', k === v));
   $('vname').textContent = viewLabel(v); renderMenu(); closeMenu(); window.scrollTo?.(0, 0);
+  if (v === 'mos') Mos.enter(); else Mos.leave();
 }
 function renderMenu() {
   if ($(VSEC[curView]).classList.contains('hidden')) { curView = 'est'; Object.entries(VSEC).forEach(([k, id]) => $(id).classList.toggle('on', k === 'est')); }
   $('vname').textContent = viewLabel(curView);
   const items = Object.keys(VSEC).filter(v => !$(VSEC[v]).classList.contains('hidden')).map(v => h('button', { type: 'button', className: 'mi' + (v === curView ? ' on' : ''), ariaCurrent: v === curView ? 'page' : 'false',
     textContent: viewLabel(v), onclick: () => setView(v) }));
-  if (me?.role === 'admin') items.push(h('a', { className: 'mi', href: 'mosaico.html', textContent: 'Mosaico de videos' }));
   $('dmenu').replaceChildren(...items);
 }
 function openMenu() { $('drawer').hidden = false; $('scrim').classList.remove('hidden'); requestAnimationFrame(() => $('drawer').classList.add('open'));
@@ -1139,8 +1139,135 @@ function logHead(x, s) {
 $('login').onsubmit = async e => { e.preventDefault();
   const { error } = await sb.auth.signInWithPassword({ email: $('em').value, password: $('pw').value });
   if (error) return $('msg').textContent = 'Credenciales incorrectas.'; start(); };
-$('out').onclick = async () => { swept = false; hashDone = false; if (sdlg.open) { pushed = false; sdlg.close(); } closeMenu(); setView('est'); await sb.auth.signOut(); $('msg').textContent = ''; me = null; kf = 'active'; usage = null; acSel.clear(); staffMap = {}; audit = []; accts = []; acErr = ''; acBuilt = false; arch = []; archMap = {}; archErr = ''; vdBuilt = false; vdTo = ''; vd = { verified: [], failed: [], busy: false, ctrl: null, note: '', skipped: 0 }; acFilter = 'sin_perfil'; acQ = ''; lastCreated = null; staffBuilt = false; clearNewStu(); nsBuilt = false; show(true, false); };
+$('out').onclick = async () => { Mos.wipe(); swept = false; hashDone = false; if (sdlg.open) { pushed = false; sdlg.close(); } closeMenu(); setView('est'); await sb.auth.signOut(); $('msg').textContent = ''; me = null; kf = 'active'; usage = null; acSel.clear(); staffMap = {}; audit = []; accts = []; acErr = ''; acBuilt = false; arch = []; archMap = {}; archErr = ''; vdBuilt = false; vdTo = ''; vd = { verified: [], failed: [], busy: false, ctrl: null, note: '', skipped: 0 }; acFilter = 'sin_perfil'; acQ = ''; lastCreated = null; staffBuilt = false; clearNewStu(); nsBuilt = false; show(true, false); };
 $('out-top').onclick = () => $('out').onclick();
 $('re').onclick = load;
 $('q').oninput = $('g').onchange = $('pg').onchange = $('ac').onchange = render;
+// ================= Mosaico de videos (solo administrador) =================
+// Antes era mosaico.html. Usa la misma sesión, la lista de estudiantes y los avatares del panel.
+const Mos = (() => {
+  const MAX_TILES = 60, TTL = 3600, M = id => $('m' + id);
+  const ls = k => { try { return localStorage.getItem(k) || ''; } catch { return ''; } };
+  const lset = (k, v) => { try { localStorage.setItem(k, v); } catch {} };
+  const fTm = d => d ? new Date(d).toLocaleTimeString('es-GT', { timeZone: TZ, hour12: false, hour: '2-digit', minute: '2-digit' }) : '';
+  let S = {}, mlogs = [], urls = {}, paused = false, io, big, seed = 1, loaded = false, rr, rz, active = false;
+  const ratio = {};
+  const rng = a => () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
+  // Formas [columnas, filas, peso] según la proporción real del video (la celda mide ~2:1).
+  const POOLS = [[1.6, 99, [[1, 1, 40], [2, 2, 35], [3, 3, 25]]], [1.15, 1.6, [[2, 3, 60], [3, 4, 40]]], [0.85, 1.15, [[1, 2, 55], [2, 4, 45]]],
+    [0.6, 0.85, [[1, 3, 55], [2, 5, 45]]], [0, 0.6, [[1, 4, 55], [2, 7, 45]]]];
+  const pick = (r, ar, cols) => { const pool = ar ? POOLS.find(p => ar >= p[0] && ar < p[1])[2] : [[1, 2, 100]];
+    const ok = pool.filter(p => p[0] <= cols), use = ok.length ? ok : [[1, 1, 100]], tot = use.reduce((a, p) => a + p[2], 0);
+    let n = r() * tot; for (const [w, hh, p] of use) if ((n -= p) < 0) return [w, hh]; return [use[0][0], use[0][1]]; };
+  const msg = t => { M('msg').textContent = t; };
+  const expired = e => /JWT|expired|not authenticated/i.test(e?.message || '');
+  const dead = e => { msg(expired(e) ? 'Su sesión venció. Salga y vuelva a entrar.' : (e.message || String(e))); };
+
+  function wipe() {
+    loaded = false; active = false; io?.disconnect(); big?.querySelector('button')?.click();
+    document.querySelectorAll('#mgrid video').forEach(v => { v.pause(); v.removeAttribute('src'); v.load(); });
+    M('grid').replaceChildren(); S = {}; mlogs = []; urls = {}; M('info').textContent = ''; msg('');
+  }
+  function leave() { active = false; document.querySelectorAll('#mgrid video').forEach(v => v.pause()); }
+  async function enter() {
+    active = true;
+    $('msz').value = ls('mosSz') || 150; $('mmode').value = ls('mosLay') === 'grid' ? 'grid' : 'collage'; $('mfit').value = ls('mosFit') === 'contain' ? 'contain' : 'fill';
+    if (loaded) return render();
+    loaded = true;
+    const last = await sb.from('daily_logs').select('practice_date').not('video_path', 'is', null).order('practice_date', { ascending: false }).limit(1);
+    if (!loaded) return;
+    $('md').value = last.data?.[0]?.practice_date || todayGT();   // la bitácora con video más reciente
+    load();
+  }
+  function fillGrades() {
+    const gr = [...new Set(students.map(x => x.grade))].sort(), cur = M('g').value;
+    M('g').replaceChildren(h('option', { value: '', textContent: 'Todos los grados' }), ...gr.map(g => h('option', { value: g, textContent: g }))); M('g').value = cur;
+  }
+  async function load() {
+    if (!loaded) return;
+    S = Object.fromEntries(students.map(x => [x.id, x])); fillGrades();
+    msg(''); M('grid').replaceChildren(h('p', { className: 'empty', textContent: 'Cargando…' }));
+    const l = await sb.from('daily_logs').select('id,student_id,practice_date,entry_at,exit_at,status,closed_late,video_path,main_activity,program')
+      .eq('practice_date', M('d').value).not('video_path', 'is', null).order('entry_at').limit(500);
+    if (l.error) return dead(l.error);
+    if (!loaded) return;
+    let gone = new Set();   // videos ya archivados y eliminados de Supabase (migracion_v8): no se pueden reproducir
+    try { const ar = await sb.from('video_archive').select('log_id').like('video_path', '%/' + M('d').value + '/%').not('removed_at', 'is', null).limit(1000);
+      if (!ar.error) gone = new Set((ar.data || []).map(a => a.log_id)); } catch {}
+    mlogs = l.data.filter(x => !gone.has(x.id)); urls = {};
+    if (gone.size) msg(`${gone.size} ${gone.size === 1 ? 'video de este día ya fue archivado' : 'videos de este día ya fueron archivados'} y no se muestra${gone.size === 1 ? '' : 'n'}.`);
+    if (!loaded) return;
+    render();
+  }
+  async function ensureUrls() {
+    const need = visible().slice(0, MAX_TILES).map(x => x.video_path).filter(p => !urls[p]);
+    if (!need.length) return true;
+    const r = await sb.storage.from('practice-videos').createSignedUrls(need, TTL);
+    if (r.error) { dead(r.error); return false; }
+    r.data.forEach(x => { if (x.signedUrl) urls[x.path] = x.signedUrl; }); return true;
+  }
+  const visible = () => { const q = M('q').value.toLowerCase(), g = M('g').value, pf = M('pg').value;
+    return mlogs.filter(x => { const s = S[x.student_id], lp = x.program || s?.program || '';
+      return s && (!g || s.grade === g) && (!pf || (pf === 'none' ? !lp : lp === pf)) && (`${s.full_name} ${s.institution || ''} ${s.practice_place}`).toLowerCase().includes(q); }); };
+  async function render() {
+    if (!loaded || !active || !await ensureUrls() || !loaded || !active) return;
+    io?.disconnect();
+    io = new IntersectionObserver(es => es.forEach(e => { const v = e.target; if (e.isIntersecting) { if (!paused) v.play().catch(() => {}); } else v.pause(); }), { rootMargin: '150px' });
+    $('mos').classList.toggle('contain', M('fit').value === 'contain');
+    const sz = +M('sz').value, collage = M('mode').value === 'collage', gd = M('grid');
+    $('mos').style.setProperty('--sz', sz + 'px');
+    const cols = Math.max(2, Math.floor((gd.clientWidth || innerWidth - 16) / (sz + 4)));
+    gd.style.setProperty('--cols', cols); gd.className = (collage ? 'collage' : '') + (sz < 150 ? ' sm' : '');
+    M('sh').classList.toggle('hidden', !collage);
+    const all = visible(), list = all.slice(0, MAX_TILES);
+    M('info').textContent = `${all.length} ${all.length === 1 ? 'video' : 'videos'}` + (all.length > MAX_TILES ? ` (se muestran ${MAX_TILES}; filtre por grado o nombre)` : '');
+    if (!list.length) return gd.replaceChildren(h('p', { className: 'empty', textContent: 'No hay videos para esa fecha y filtros.' }));
+    gd.replaceChildren(...list.map(x => {
+      const s = S[x.student_id], u = urls[x.video_path], av = avUrl(s), lp = x.program || s.program;
+      const tile = (c, ...k) => { const t = h('div', { className: c }, ...k); t._p = x.video_path; return t; };
+      const cap = h('div', { className: 'cap' + (av ? ' wav' : '') }, av ? h('i', { className: 'av', style: `background-image:url("${av}")` }) : '',
+        h('b', { textContent: s.full_name }),
+        h('span', { textContent: `${PROG[lp] ? PROG[lp] + ' · ' : ''}${s.grade} · ${s.institution || s.practice_place} · ${fTm(x.entry_at)}${x.exit_at ? '–' + fTm(x.exit_at) : ''}` }));
+      if (!u) return tile('tile bad', 'Video no disponible', cap);
+      const v = h('video', { src: u, muted: true, loop: true, playsInline: true, preload: 'auto' });
+      v.muted = true; v.setAttribute('muted', '');
+      v.onloadedmetadata = () => { if (!v.videoWidth || !v.videoHeight) return;
+        const first = !ratio[x.video_path]; ratio[x.video_path] = v.videoWidth / v.videoHeight;
+        if (first) { clearTimeout(rr); rr = setTimeout(() => loaded && active && applyShapes(), 120); } };
+      io.observe(v);
+      const t = tile('tile', v, cap, x.closed_late ? h('div', { className: 'tag', textContent: 'Cierre tardío' }) : '');
+      t.title = 'Clic para ver en grande con sonido'; t.onclick = () => openBig(x, s, u); return t;
+    }));
+    applyShapes();
+  }
+  function applyShapes() {
+    const gd = M('grid'), cols = +gd.style.getPropertyValue('--cols') || 2, collage = gd.classList.contains('collage'), rnd = rng(seed);
+    gd.querySelectorAll('.tile').forEach(t => { const [w, hh] = pick(rnd, ratio[t._p], cols);
+      t.className = t.className.replace(/\s*k\d+\d/g, '');
+      if (collage) { t.style.setProperty('--w', w); t.style.setProperty('--h', hh); t.classList.add(`k${w}${hh}`); }
+      else { t.style.removeProperty('--w'); t.style.removeProperty('--h'); } });
+  }
+  function openBig(x, s, u) {
+    if (big) return;
+    const prev = document.activeElement, v = h('video', { src: u, controls: true, autoplay: true, playsInline: true });
+    const close = () => { v.pause(); v.removeAttribute('src'); v.load(); document.removeEventListener('keydown', k); big.remove(); big = null; unlock(); prev?.focus?.(); };
+    const k = e => { if (e.key === 'Escape') close(); };
+    const b = h('button', { type: 'button', textContent: '✕ Cerrar', onclick: close });
+    big = h('div', { className: 'mbig', role: 'dialog', ariaModal: 'true' }, h('div', { className: 'mt' },
+      h('span', { textContent: `${s.full_name} · ${PROG[x.program || s.program] ? PROG[x.program || s.program] + ' · ' : ''}${x.practice_date}${x.main_activity ? ' · ' + x.main_activity : ''}` }), b), v);
+    document.body.append(big); document.body.classList.add('noscroll'); document.addEventListener('keydown', k); b.focus();
+  }
+  M('pp').onclick = () => { paused = !paused; M('pp').textContent = paused ? 'Reanudar todo' : 'Pausar todo';
+    document.querySelectorAll('#mgrid video').forEach(v => paused ? v.pause() : v.play().catch(() => {})); };
+  M('d').onchange = M('re').onclick = load;
+  M('g').onchange = M('pg').onchange = M('q').oninput = render;
+  M('sz').oninput = () => { lset('mosSz', M('sz').value); render(); };
+  M('fit').onchange = () => { lset('mosFit', M('fit').value); render(); };
+  M('mode').onchange = () => { lset('mosLay', M('mode').value); render(); };
+  M('sh').onclick = () => { seed = (seed * 7919 + 13) % 100003; render(); };
+  addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(() => loaded && active && render(), 200); });
+  { const mq = matchMedia('(min-width:900px)'), sync = () => { if (mq.matches) M('opts').open = true; }; sync(); mq.addEventListener?.('change', sync); }
+  return { enter, leave, wipe };
+})();
+
 start();
