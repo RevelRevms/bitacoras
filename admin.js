@@ -1016,9 +1016,13 @@ async function signedMedia(bucket, path) {
 }
 // Última jornada (finalizada o iniciada) con su foto de inicio y su video, a la vista en el Resumen
 function lastJornada(s, M) {
-  const x = M.mine.reduce((a, y) => !a || y.practice_date > a.practice_date || (y.practice_date === a.practice_date && (y.entry_at || '') > (a.entry_at || '')) ? y : a, null);
-  const card = h('section', { className: 'lastj', ariaLabel: 'Última jornada' }, h('h3', { textContent: 'Última jornada' }));
-  if (!x) return card.append(h('p', { className: 'empty', textContent: 'Todavía no ha iniciado ninguna jornada.' })) || card;
+  const D = viewDay(), byDay = D !== todayGT();   // con una fecha elegida se muestra esa jornada, no la última
+  const x = byDay ? M.mine.find(y => y.practice_date === D)
+    : M.mine.reduce((a, y) => !a || y.practice_date > a.practice_date || (y.practice_date === a.practice_date && (y.entry_at || '') > (a.entry_at || '')) ? y : a, null);
+  const title = byDay ? 'Jornada del ' + fD(D) : 'Última jornada';
+  const card = h('section', { className: 'lastj', ariaLabel: title }, h('h3', { textContent: title }));
+  if (!x) { const rd = byDay ? restFor(s.id, D) : null;
+    return card.append(h('p', { className: 'empty', textContent: !byDay ? 'Todavía no ha iniciado ninguna jornada.' : rd ? 'Día de descanso' + (rd.reason ? ': ' + rd.reason : '') + '. No hay bitácora.' : 'No hay bitácora de este estudiante en esa fecha.' })) || card; }
   const today = todayGT(), stale = isStale(x, today), min = Horas.minutes(x);
   const st = stale ? ['late', `Sin cerrar desde hace ${dias(dayDiff(x.practice_date, today))}`] : x.status === 'in_progress' ? ['on', `En jornada desde ${fT(x.entry_at).slice(0, 5)}`]
     : x.status === 'unclosed' ? ['late', 'Jornada no concluida'] : ['done', 'Completada'];
