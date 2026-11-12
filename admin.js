@@ -1041,6 +1041,9 @@ function setView(v) {
   curView = v; Object.entries(VSEC).forEach(([k, id]) => $(id).classList.toggle('on', k === v));
   $('vname').textContent = viewLabel(v); renderMenu(); closeMenu(); window.scrollTo?.(0, 0);
   if (v === 'mos') Mos.enter(); else Mos.leave();
+  // la dirección solo lleva #mosaico mientras se está en el mosaico; en cualquier otra sección se limpia
+  try { if (v === 'mos') { if (location.hash !== '#mosaico') history.replaceState(history.state, '', '#mosaico'); }
+    else if (location.hash === '#mosaico') history.replaceState(history.state, '', location.pathname + location.search); } catch {}
 }
 function renderMenu() {
   if ($(VSEC[curView]).classList.contains('hidden')) { curView = 'est'; Object.entries(VSEC).forEach(([k, id]) => $(id).classList.toggle('on', k === 'est')); }
