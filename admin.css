@@ -388,3 +388,25 @@ dialog.sdlg .vmodal,dialog.sdlg .dlg{position:fixed}
 @media(min-width:768px){#mos{margin:0 calc(var(--gut) * -1)}#mos .mbar{padding:12px 20px}#mos .mtitle{font-size:1.8rem}.mctl{grid-template-columns:repeat(4,1fr)}.mctl .sz,.mctl .wide{grid-column:span 2}#mgrid{padding:8px 12px 40px;gap:5px}}
 @media(min-width:900px){#mopts>summary{display:none}#mopts{margin-top:10px}.mctl{display:flex;flex-wrap:wrap;gap:10px;align-items:center;padding:0}.mctl .wide{width:220px}.mctl input[type=range]{width:130px}}
 #mos{margin-bottom:-56px}
+/* Resumen: datos a la izquierda, última jornada a la derecha */
+.rsum{display:grid;gap:18px;align-items:start}
+.lastj{border:1px solid var(--rule2);border-top:4px solid var(--ink);border-radius:4px;padding:12px 14px;background:#fff;min-width:0}
+.lastj h3{margin:0 0 6px;font:700 1.15rem var(--head)}
+.lj-head{display:flex;flex-wrap:wrap;gap:6px 12px;align-items:center;justify-content:space-between}
+.lj-head b{font:700 1.2rem var(--head);text-transform:capitalize}
+.lj-head .led{margin:0}
+.lj-meta{margin:6px 0 0;color:var(--mut);font-size:.9rem}
+.lj-act{margin:6px 0 0}
+.lj-media{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:12px 0}
+.lj-fig{margin:0;display:flex;flex-direction:column;gap:4px;min-width:0}
+.lj-fig figcaption{font-size:.78rem;color:var(--mut)}
+.lj-fig video,.lj-fig img{width:100%;max-height:300px;object-fit:cover;background:#000;border-radius:3px;display:block}
+.lj-fig video{object-fit:contain;aspect-ratio:3/4}
+.ljb{padding:0;min-height:0;border:0;background:none;box-shadow:none;border-radius:3px;cursor:zoom-in;display:block;width:100%}
+.ljb:hover{background:none}.ljb:active:not(:disabled){transform:none}.ljb img{aspect-ratio:3/4}
+.lj-none{margin:0;padding:12px 8px;border:1px dashed var(--rule2);border-radius:3px;color:var(--mut);font-size:.85rem;text-align:center;aspect-ratio:3/4;display:grid;place-items:center}
+@media(min-width:900px){
+  .rsum{grid-template-columns:minmax(0,1fr) minmax(340px,440px)}
+  .rsum .rleft .facts{grid-template-columns:repeat(2,1fr)}
+  .rsum .rleft .facts>div:nth-child(2){grid-column:auto}
+}

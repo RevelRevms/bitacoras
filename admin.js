@@ -989,8 +989,7 @@ function renderDetail(force) {
 }
 function tabResumen(s, M) {
   const fact = (k, v) => h('div', {}, h('small', { textContent: k }), h('span', { textContent: v || '—' })), tel = (s.supervisor_contact || '').replace(/[^\d+]/g, ''), hs = M.hs;
-  return h('div', { className: 'inner' },
-    M.rei ? h('div', { className: 'banner', textContent: `Reincidente: ${M.m.length} jornadas sin cerrar a tiempo en los últimos ${REINC_DIAS} días. Considere registrar una amonestación.` }) : '',
+  const left = h('div', { className: 'rleft' },
     h('div', { className: 'facts' }, fact('Tipo de práctica', progName(s.program)), fact('Empresa o institución', s.institution), fact('Dirección de la empresa', s.practice_place),
       fact('Encargado de la práctica', s.supervisor_name || 'Sin registrar'),
       h('div', {}, h('small', { textContent: 'Contacto del encargado' }), s.supervisor_contact && tel ? h('a', { className: 'tel', href: 'tel:' + tel, textContent: s.supervisor_contact }) : h('span', { textContent: '—' })),
@@ -1004,6 +1003,45 @@ function tabResumen(s, M) {
       s.program ? h('button', { type: 'button', className: 'sec', textContent: `Pasar a ${progName(s.program === 'prepractica' ? 'practica' : 'prepractica')}`, onclick: () => setProgram(s) })
         : h('button', { type: 'button', className: 'sec', textContent: 'Asignar Práctica Supervisada', onclick: () => setProgramFirst(s, 'practica') }),
       !s.program ? h('button', { type: 'button', className: 'sec', textContent: 'Asignar Prepráctica', onclick: () => setProgramFirst(s, 'prepractica') }) : ''));
+  return h('div', { className: 'inner' },
+    M.rei ? h('div', { className: 'banner', textContent: `Reincidente: ${M.m.length} jornadas sin cerrar a tiempo en los últimos ${REINC_DIAS} días. Considere registrar una amonestación.` }) : '',
+    h('div', { className: 'rsum' }, left, lastJornada(s, M)));
+}
+// Enlaces firmados de fotos y videos, reutilizados mientras siguen vigentes (50 de 60 min)
+const mUrl = {};
+async function signedMedia(bucket, path) {
+  const k = bucket + '/' + path, c = mUrl[k]; if (c && c.t > Date.now()) return c.u;
+  const r = await sb.storage.from(bucket).createSignedUrl(path, 3600); if (r.error) throw r.error;
+  mUrl[k] = { u: r.data.signedUrl, t: Date.now() + 50 * 60e3 }; return r.data.signedUrl;
+}
+// Última jornada (finalizada o iniciada) con su foto de inicio y su video, a la vista en el Resumen
+function lastJornada(s, M) {
+  const x = M.mine.reduce((a, y) => !a || y.practice_date > a.practice_date || (y.practice_date === a.practice_date && (y.entry_at || '') > (a.entry_at || '')) ? y : a, null);
+  const card = h('section', { className: 'lastj', ariaLabel: 'Última jornada' }, h('h3', { textContent: 'Última jornada' }));
+  if (!x) return card.append(h('p', { className: 'empty', textContent: 'Todavía no ha iniciado ninguna jornada.' })) || card;
+  const today = todayGT(), stale = isStale(x, today), min = Horas.minutes(x);
+  const st = stale ? ['late', `Sin cerrar desde hace ${dias(dayDiff(x.practice_date, today))}`] : x.status === 'in_progress' ? ['on', `En jornada desde ${fT(x.entry_at).slice(0, 5)}`]
+    : x.status === 'unclosed' ? ['late', 'Jornada no concluida'] : ['done', 'Completada'];
+  card.append(h('div', { className: 'lj-head' }, h('b', { textContent: fD(x.practice_date) }), h('div', { className: 'led ' + st[0], textContent: st[1] })),
+    h('p', { className: 'lj-meta', textContent: `Entrada ${fT(x.entry_at).slice(0, 5)}` + (x.exit_at ? ` · Salida ${fT(x.exit_at).slice(0, 5)}` : '') + (min !== null ? ` · ${Horas.fHM(min)} netas` : '') }));
+  if (x.main_activity) card.append(h('p', { className: 'lj-act', textContent: x.main_activity }));
+  const fig = (label, node) => h('figure', { className: 'lj-fig' }, node, h('figcaption', { textContent: label }));
+  const none = t => h('p', { className: 'lj-none', textContent: t });
+  const media = h('div', { className: 'lj-media' });
+  if (x.start_photo_path) { const pa = pArchMap[x.id];
+    if (pa?.removed_at) media.append(fig('Foto de inicio', none('Archivada y eliminada de Supabase.')));
+    else { const img = h('img', { alt: 'Foto de inicio de jornada' }), b = h('button', { type: 'button', className: 'ljb', title: 'Ampliar la foto', onclick: e => openPhoto(x, e.currentTarget) }, img); b.disabled = true;
+      signedMedia('practice-photos', x.start_photo_path).then(u => { img.src = u; b.disabled = false; }).catch(() => b.replaceWith(none('No se pudo cargar la foto.')));
+      media.append(fig('Foto de inicio', b)); } }
+  else media.append(fig('Foto de inicio', none(x.status === 'unclosed' ? 'Sin foto.' : 'Sin foto de inicio.')));
+  if (x.video_path) { const ar = archMap[x.id];
+    if (ar?.removed_at) media.append(fig('Video de evidencia', none('Archivado y eliminado de Supabase.')));
+    else { const v = h('video', { controls: true, playsInline: true, preload: 'metadata' });
+      signedMedia('practice-videos', x.video_path).then(u => { v.src = u + '#t=0.1'; }).catch(() => v.replaceWith(none('No se pudo cargar el video.')));
+      media.append(fig('Video de evidencia', v)); } }
+  else media.append(fig('Video de evidencia', none(x.status === 'in_progress' ? 'Todavía no hay video.' : 'Sin video.')));
+  card.append(media, h('button', { type: 'button', className: 'sec', textContent: 'Ver jornada completa', onclick: () => { openStu.tab = 'jornadas'; openStu.logId = x.id; renderDetail(true); } }));
+  return card;
 }
 function tabJornadas(s, M) {
   if (!M.n) return h('p', { className: 'empty pad', textContent: 'Todavía no ha enviado bitácoras.' });
@@ -1142,7 +1180,7 @@ function logHead(x, s) {
 $('login').onsubmit = async e => { e.preventDefault();
   const { error } = await sb.auth.signInWithPassword({ email: $('em').value, password: $('pw').value });
   if (error) return $('msg').textContent = 'Credenciales incorrectas.'; start(); };
-$('out').onclick = async () => { Mos.wipe(); swept = false; hashDone = false; if (sdlg.open) { pushed = false; sdlg.close(); } closeMenu(); setView('est'); await sb.auth.signOut(); $('msg').textContent = ''; me = null; kf = 'active'; usage = null; acSel.clear(); staffMap = {}; audit = []; accts = []; acErr = ''; acBuilt = false; arch = []; archMap = {}; archErr = ''; vdBuilt = false; vdTo = ''; vd = { verified: [], failed: [], busy: false, ctrl: null, note: '', skipped: 0 }; acFilter = 'sin_perfil'; acQ = ''; lastCreated = null; staffBuilt = false; clearNewStu(); nsBuilt = false; show(true, false); };
+$('out').onclick = async () => { Mos.wipe(); for (const k in mUrl) delete mUrl[k]; swept = false; hashDone = false; if (sdlg.open) { pushed = false; sdlg.close(); } closeMenu(); setView('est'); await sb.auth.signOut(); $('msg').textContent = ''; me = null; kf = 'active'; usage = null; acSel.clear(); staffMap = {}; audit = []; accts = []; acErr = ''; acBuilt = false; arch = []; archMap = {}; archErr = ''; vdBuilt = false; vdTo = ''; vd = { verified: [], failed: [], busy: false, ctrl: null, note: '', skipped: 0 }; acFilter = 'sin_perfil'; acQ = ''; lastCreated = null; staffBuilt = false; clearNewStu(); nsBuilt = false; show(true, false); };
 $('out-top').onclick = () => $('out').onclick();
 $('re').onclick = load;
 $('q').oninput = $('g').onchange = $('pg').onchange = $('ac').onchange = render;
