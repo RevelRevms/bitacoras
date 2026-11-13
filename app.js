@@ -3,6 +3,7 @@ const sb = supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY,
 const $ = id => document.getElementById(id);
 const TZ = 'America/Guatemala', MAX = 10 * 1024 * 1024;
 const SCREENS = ['s-login','s-profile','s-extra','s-sched','s-home','s-form','s-done','s-staff'];
+let pushInit = false;
 let mySched = { conf: null, pend: null, rej: null, any: false }, schedSkip = false;
 let user, student, log, myLogs = [], myNotes = [], myRests = [], video = null, myArch = {}, myPArch = {}; // video = {blob, type, name} (solo para la vista previa local)
 
@@ -106,6 +107,8 @@ async function route() {
   if (log?.practice_date === todayGT()) return showReceipt();
   if (!mySched.any && !schedSkip && student.active !== false) return openSched();
   renderSchedCard();
+  if (!pushInit) { pushInit = true; Push.init(sb); }
+  Push.card($('push-card'), { compact: true });
   $('today').textContent = fmtDate(todayGT());
   const rt = myRests.find(r => r.rest_date === todayGT());   // el servidor también lo impide (DIA_DE_DESCANSO)
   $('b-start').classList.toggle('hidden', !!rt); $('start-box').classList.toggle('hidden', !!rt);

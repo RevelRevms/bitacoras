@@ -419,3 +419,16 @@ dialog.sdlg .vmodal,dialog.sdlg .dlg{position:fixed}
 .revact{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}.revact button{width:auto;min-height:40px;margin:0}
 .schedj{margin-top:14px}
 dl.sched{display:grid;grid-template-columns:auto 1fr;gap:2px 14px;margin:6px 0;font-size:.92rem}dl.sched dt{font-weight:700}dl.sched dd{margin:0}
+
+/* avisos */
+.pform label.ck{display:flex;align-items:center;gap:10px;font-weight:400;margin:6px 0;min-height:40px}
+.pform label.ck input{width:22px;height:22px;min-height:0;flex:none;accent-color:var(--ink)}
+.pgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.pdays{display:flex;flex-wrap:wrap;gap:4px 14px}
+.pstat details{margin:6px 0}
+.pacts{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0}.pacts button{width:auto;margin:0}
+.pform h3,.pstat h3{margin:16px 0 4px}
+.pform label:not(.ck){display:block;margin:12px 0 4px;font-weight:700}
+.pgrid>div{min-width:0}.pgrid label{margin-top:0!important;font-size:.86rem}
+.pform select,.pform input:not([type=checkbox]){width:100%;min-height:44px}
+.pform .pdays label.ck{margin:2px 0}

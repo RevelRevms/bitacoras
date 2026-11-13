@@ -1,8 +1,10 @@
 <!DOCTYPE html>
 <html lang="es"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="manifest" href="manifest.webmanifest"><meta name="theme-color" content="#14213d"><link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="Bitácora"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>Bitácora de práctica supervisada</title>
-<link rel="stylesheet" href="styles.css?v=20"></head><body><header class="top"><h1>Bitácora<span id="ttl-sub">de práctica supervisada</span></h1></header><main class="sheet">
+<link rel="stylesheet" href="styles.css?v=21"></head><body><header class="top"><h1>Bitácora<span id="ttl-sub">de práctica supervisada</span></h1></header><main class="sheet">
 <div id="msg" class="err" role="alert"></div>
 
 <section id="s-login" class="card hidden"><h2 class="cover">Registre su jornada de hoy</h2><p class="info">Entre con el correo y la contraseña que le dio su administrador.</p><form id="f-login">
@@ -53,7 +55,7 @@
 
 <section id="s-home" class="card hidden"><div class="me"><div id="me-av" class="av"></div><div id="who" class="info"></div></div>
 <button type="button" id="b-avchg" class="sec small chg-av">Cambiar mi foto de perfil</button><input id="av-chg" type="file" accept="image/*" class="hidden">
-<div id="sched-card" class="notice hidden"></div><p id="today" class="today"></p><p id="rest-today" class="notice restnow hidden"></p>
+<div id="sched-card" class="notice hidden"></div><div id="push-card" class="notice hidden"></div><p id="today" class="today"></p><p id="rest-today" class="notice restnow hidden"></p>
 <p id="inactive-note" class="notice bad hidden"><b>Su cuenta está inactiva.</b> No puede iniciar nuevas jornadas. Puede consultar su historial. Si cree que es un error, hable con su administrador.</p>
 <div id="start-box"><h2 class="eh">Foto de inicio de jornada</h2>
 <p class="notice"><b>Importante:</b> no fotografíe información, documentos, pantallas o áreas que la empresa o institución no permita mostrar, ni a ninguna persona sin su consentimiento previo.</p>
@@ -129,4 +131,4 @@
 <button type="button" id="pic-cancel" class="sec">Cancelar</button>
 </div></div></div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="ojo.js?v=3"></script><script src="supabase-config.js?v=8"></script><script src="horas.js?v=3"></script><script src="app.js?v=25"></script></body></html>
+<script src="ojo.js?v=3"></script><script src="supabase-config.js?v=8"></script><script src="horas.js?v=3"></script><script src="push.js?v=1"></script><script src="app.js?v=26"></script></body></html>

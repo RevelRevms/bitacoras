@@ -110,9 +110,54 @@ async function load() {
   $('msg').textContent = n.error || rd.error ? 'Algunas funciones no están disponibles (¿ya ejecutó migracion_v2.sql en Supabase?).'
     : v4 && sd.error ? 'No se pudo cargar el personal (¿ya ejecutó migracion_v4.sql en Supabase?).' : '';
   render(); sweepDeletedMedia();
-  if (!hashDone) { hashDone = true; const id = hashId(); if (id) openStudent(id, { push: false }); else if (location.hash === '#mosaico' && me?.role === 'admin') setView('mos'); }
+  if (!hashDone) { hashDone = true; const id = hashId(); if (id) openStudent(id, { push: false }); else if (location.hash === '#mosaico' && me?.role === 'admin') setView('mos'); else if (location.hash === '#revisiones') setView('rev'); }
 }
-let hashDone = false;
+let hashDone = false, pushInit = false, pushSt = null, pushUsers = new Map();
+
+// ---- Avisos (push): instalación, dispositivo propio y, para el administrador, los ajustes ----
+const PD = [['1', 'Lun'], ['2', 'Mar'], ['3', 'Mié'], ['4', 'Jue'], ['5', 'Vie'], ['6', 'Sáb'], ['0', 'Dom']];
+async function renderAvisos() {
+  if (!pushInit) { pushInit = true; Push.init(sb, 'sw.js'); }
+  Push.card($('push-card-a'), { title: 'Este dispositivo' });
+  const box = $('avisos-body'); box.replaceChildren();
+  const [{ data: ps }, cfg] = await Promise.all([sb.rpc('push_status'), Push.config()]);
+  pushUsers = new Map((ps || []).map(r => [r.user_id, r.devices]));
+  if (me?.role !== 'admin') return;
+  const { data: s, error } = await sb.from('push_settings').select('*').eq('id', 1).maybeSingle();
+  if (error || !s) return box.append(h('p', { className: 'empty', textContent: 'Falta ejecutar migracion_v15.sql en Supabase para usar los avisos.' }));
+  pushSt = s;
+  const act = students.filter(z => z.active !== false), sin = act.filter(z => !pushUsers.has(z.id));
+  const f = h('form', { className: 'pform', onsubmit: async e => { e.preventDefault(); const btn = f.querySelector('[type=submit]'); btn.disabled = true; $('p-out').textContent = '';
+      const days = PD.filter(([k]) => f.querySelector('#pd' + k).checked).map(([k]) => +k);
+      const { error: er } = await sb.rpc('admin_save_push_settings', { p_enabled: f.pen.checked, p_interval: +f.pint.value, p_from: +f.pfrom.value, p_to: +f.pto.value, p_days: days,
+        p_start: f.pst.checked, p_close: f.pcl.checked, p_staff: f.psf.checked, p_results: f.prs.checked, p_soff: +f.psoff.value, p_coff: +f.pcoff.value, p_vapid: f.pvap.value });
+      btn.disabled = false; $('p-out').textContent = er ? ({ AJUSTES_INVALIDOS: 'Revise los valores: la hora final debe ser posterior a la inicial y debe haber al menos un día.', VAPID_INVALIDA: 'La clave pública VAPID no tiene el formato correcto.' }[(er.message.match(/[A-Z_]{8,}/) || [])[0]] || errText(er)) : 'Ajustes guardados.'; if (!er) { await renderAvisos(); $('p-out').textContent = 'Ajustes guardados.'; } } },
+    h('h3', { textContent: 'Ajustes de los avisos' }),
+    h('label', { className: 'ck' }, h('input', { type: 'checkbox', name: 'pen', checked: s.enabled }), 'Enviar avisos'),
+    h('div', { className: 'pgrid' },
+      h('div', {}, h('label', { textContent: 'Revisar cada' }), h('select', { name: 'pint' }, [5, 10, 15, 30, 60].map(v => h('option', { value: v, textContent: v + ' min', selected: v === s.interval_min })))),
+      h('div', {}, h('label', { textContent: 'Desde las' }), h('select', { name: 'pfrom' }, Array.from({ length: 24 }, (_, i) => h('option', { value: i, textContent: i + ':00', selected: i === s.hour_from })))),
+      h('div', {}, h('label', { textContent: 'Hasta las' }), h('select', { name: 'pto' }, Array.from({ length: 24 }, (_, i) => h('option', { value: i + 1, textContent: (i + 1) + ':00', selected: i + 1 === s.hour_to }))))),
+    h('label', { textContent: 'Días' }), h('div', { className: 'pdays' }, PD.map(([k, n]) => h('label', { className: 'ck' }, h('input', { type: 'checkbox', id: 'pd' + k, checked: (s.days || []).includes(+k) }), n))),
+    h('label', { textContent: 'Qué avisar' }),
+    h('label', { className: 'ck' }, h('input', { type: 'checkbox', name: 'pst', checked: s.remind_start }), 'Estudiantes: recordar iniciar la jornada'),
+    h('label', { className: 'ck' }, h('input', { type: 'checkbox', name: 'pcl', checked: s.remind_close }), 'Estudiantes: recordar cerrar la jornada'),
+    h('label', { className: 'ck' }, h('input', { type: 'checkbox', name: 'prs', checked: s.notify_results }), 'Estudiantes: resultado de horarios y horas revisadas'),
+    h('label', { className: 'ck' }, h('input', { type: 'checkbox', name: 'psf', checked: s.notify_staff }), 'Administradores y supervisores: revisiones pendientes'),
+    h('div', { className: 'pgrid' },
+      h('div', {}, h('label', { textContent: 'Aviso de inicio: minutos después de la entrada' }), h('input', { type: 'number', name: 'psoff', min: 0, max: 60, value: s.start_offset_min })),
+      h('div', {}, h('label', { textContent: 'Aviso de cierre: minutos después de la salida' }), h('input', { type: 'number', name: 'pcoff', min: 0, max: 60, value: s.close_offset_min }))),
+    h('label', { textContent: 'Clave pública VAPID', htmlFor: 'pvap' }), h('input', { id: 'pvap', name: 'pvap', value: s.vapid_public || '', autocomplete: 'off', spellcheck: false }),
+    h('p', { className: 'sub', textContent: 'Se genera una sola vez (vea el README). La clave privada va en los secretos de la función, nunca aquí.' }),
+    h('div', { className: 'pacts' }, h('button', { type: 'submit', textContent: 'Guardar ajustes' })), h('p', { id: 'p-out', className: 'info', role: 'status' }));
+  const st = h('div', { className: 'pstat' }, h('h3', { textContent: 'Estado' }),
+    cfg.configured ? '' : h('p', { className: 'banner', textContent: 'Falta enlazar la función de envío: complete la tabla push_private (README, sección v21).' }),
+    h('p', { className: 'info', textContent: `Última revisión automática: ${s.last_run_at ? fDT(s.last_run_at) : 'todavía ninguna'}. Avisos enviados en esa tanda: ${s.last_sent}.` }),
+    h('p', { className: 'info', textContent: `Estudiantes con avisos activados: ${act.length - sin.length} de ${act.length}.` }),
+    sin.length ? h('details', {}, h('summary', { textContent: `Sin avisos (${sin.length})` }), h('p', { className: 'info', textContent: sin.map(z => z.full_name).join(', ') })) : '');
+  box.append(st, f);
+}
+
 
 // ---- Revisiones: horarios por confirmar y horas declaradas por revisar (migracion_v14.sql) ----
 async function decideSched(v, ok) {
@@ -344,7 +389,7 @@ function render() {
 
   renderPending(today, byId);
   renderRest(today);
-  renderRev(); renderStaff(); renderNewStu(); renderAccts(); renderVids();
+  renderRev(); renderAvisos(); renderStaff(); renderNewStu(); renderAccts(); renderVids();
 
   const days = [...Array(14)].map((_, i) => shiftDay(today, i - 13));
   const cnt = days.map(d => logs.filter(x => x.practice_date === d).length), mx = Math.max(1, ...cnt);
@@ -515,6 +560,7 @@ const val2 = v => v === null || v === undefined ? '—' : v === true ? 'sí' : v
 function describe(a) {
   const stu = students.find(s => s.id === a.student_id), tgt = staffMap[a.target_user], d = a.detail || {};
   const ch = Object.entries(d).filter(([, v]) => v && typeof v === 'object' && 'a' in v).map(([k, v]) => `${FIELD[k] || k}: ${val2(v.de)} → ${val2(v.a)}`).join('; ');
+  if (a.action === 'avisos_ajustes') return `Cambió los ajustes de avisos: ${d.activados ? 'activados' : 'desactivados'}, cada ${d.cada_min} min, de ${String(d.horas).replace('-', ' a ')} h`;
   if (a.action === 'horario_confirmado' || a.action === 'horario_rechazado') return `${a.action === 'horario_confirmado' ? 'Confirmó' : 'Rechazó'} el horario semanal de ${stu?.full_name || 'un estudiante'}${d.nota ? ' · ' + d.nota : ''}`;
   if (a.action === 'hora_aprobada' || a.action === 'hora_rechazada') return `${a.action === 'hora_aprobada' ? 'Aprobó' : 'Rechazó'} la hora de ${d.lado === 'entry' ? 'entrada' : 'salida'} del ${d.fecha ? fD(d.fecha) : '—'} de ${stu?.full_name || 'un estudiante'}${d.hora_final && d.hora_final !== d.hora_declarada ? ` (la dejó en ${fT(d.hora_final).slice(0, 5)})` : ''}${d.nota ? ' · ' + d.nota : ''}`;
   if (a.action === 'personal_creado') return `Creó la cuenta de supervisor ${d.nombre} (${d.correo})`;
@@ -1057,6 +1103,7 @@ function tabResumen(s, M) {
   const left = h('div', { className: 'rleft' },
     h('div', { className: 'facts' }, fact('Tipo de práctica', progName(s.program)), fact('Empresa o institución', s.institution), fact('Dirección de la empresa', s.practice_place),
       fact('Encargado de la práctica', s.supervisor_name || 'Sin registrar'),
+      fact('Avisos en el celular', pushUsers.has(s.id) ? `Activados (${pushUsers.get(s.id)} ${pushUsers.get(s.id) === 1 ? 'dispositivo' : 'dispositivos'})` : 'No activados'),
       h('div', {}, h('small', { textContent: 'Contacto del encargado' }), s.supervisor_contact && tel ? h('a', { className: 'tel', href: 'tel:' + tel, textContent: s.supervisor_contact }) : h('span', { textContent: '—' })),
       fact('Grado y sección', `${s.grade}, sección ${s.section}`),
       h('div', { className: 'hsum' }, h('small', { textContent: 'Horas acumuladas del período de práctica' }),
@@ -1152,7 +1199,7 @@ function tabInforme(s) {
 }
 
 // ---- Menú de secciones (hamburguesa) ----
-const VSEC = { est: 'v-est', rev: 'rev', rest: 'rest', staff: 'staff', newstu: 'newstu', accts: 'accts', vids: 'vids', mos: 'mos' };
+const VSEC = { est: 'v-est', rev: 'rev', avisos: 'avisos', rest: 'rest', staff: 'staff', newstu: 'newstu', accts: 'accts', vids: 'vids', mos: 'mos' };
 let curView = 'est';
 const viewLabel = v => v === 'mos' ? 'Mosaico de videos' : v === 'est' ? 'Estudiantes' : ($(VSEC[v] + '-sum') || $(VSEC[v]).querySelector('h2'))?.textContent || v;
 function setView(v) {
