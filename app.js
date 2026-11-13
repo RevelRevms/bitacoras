@@ -2,7 +2,7 @@ const sb = supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY,
   { auth: { persistSession: true, autoRefreshToken: true } });
 const $ = id => document.getElementById(id);
 const TZ = 'America/Guatemala', MAX = 10 * 1024 * 1024;
-const SCREENS = ['s-login','s-profile','s-extra','s-sched','s-home','s-form','s-done','s-staff'];
+const SCREENS = ['s-login','s-profile','s-extra','s-sched','s-more','s-home','s-form','s-done','s-staff'];
 let pushInit = false;
 let mySched = { conf: null, pend: null, rej: null, any: false }, schedSkip = false;
 let user, student, log, myLogs = [], myNotes = [], myRests = [], video = null, myArch = {}, myPArch = {}; // video = {blob, type, name} (solo para la vista previa local)
@@ -97,6 +97,7 @@ async function route() {
     mySched = schedState(sr.error ? [] : sr.data || []); } catch { mySched = schedState([]); }   // migracion_v14: si aún no existe, rige la regla anterior
   setWho(); setTitle(student.program);
   showAvatars();
+  document.querySelectorAll('.go-more').forEach(b => b.textContent = mySched.any ? 'Mi horario y avisos' : 'Definir mi horario y avisos');
   if (log?.status === 'in_progress') {
     const late = log.practice_date < todayGT();
     $('late-box').classList.toggle('hidden', !late); $('late-date').textContent = fmtDate(log.practice_date);
@@ -611,8 +612,8 @@ function schedTable(days) {
   DIAS.forEach(([k, n]) => { const d = days?.[k]; if (d) dl.append(el('b', { textContent: n }), el('span', { textContent: `${f12(d.s)} a ${f12(d.e)}, almuerzo ${d.l} min (${Horas.fHM(netMin(d))} netas)` })); });
   return dl;
 }
-function renderSchedCard() {
-  const c = $('sched-card'); c.replaceChildren();
+function renderSchedCard(c = $('sched-card')) {
+  c.replaceChildren();
   const { conf, pend, rej } = mySched;
   c.append(el('b', { textContent: 'Mi horario semanal' }));
   if (conf) c.append(schedTable(conf.days));
@@ -623,6 +624,14 @@ function renderSchedCard() {
   c.append(el('button', { type: 'button', className: 'sec small', textContent: conf || pend ? 'Cambiar mi horario' : 'Definir mi horario', onclick: openSched }));
   c.classList.remove('hidden');
 }
+function openMore() {   // horario y avisos también con la jornada iniciada o ya registrada hoy
+  renderSchedCard($('sched-card2'));
+  if (!pushInit) { pushInit = true; Push.init(sb); }
+  Push.card($('push-card2'), { compact: true });
+  msg(''); show('s-more');
+}
+document.querySelectorAll('.go-more').forEach(b => b.onclick = openMore);
+$('more-back').onclick = () => route();
 function openSched() {
   const base = mySched.pend?.days || mySched.conf?.days || {};
   const box = $('sc-rows'); box.replaceChildren();
