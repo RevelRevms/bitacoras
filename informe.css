@@ -44,3 +44,5 @@ table.tb{width:100%;border-collapse:collapse;font-size:9pt}
 h3{break-after:avoid;page-break-after:avoid}.unit,.blk>h3+.nt,figure,.id,.rh{break-inside:avoid}.unit{margin-bottom:4px}.blk{break-inside:auto}
 
 .embed .bar{display:none}.embed body{background:#fff}
+
+.rg{font-style:italic;color:#7a5200;font-size:.82em}

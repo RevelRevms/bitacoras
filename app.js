@@ -2,7 +2,8 @@ const sb = supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY,
   { auth: { persistSession: true, autoRefreshToken: true } });
 const $ = id => document.getElementById(id);
 const TZ = 'America/Guatemala', MAX = 10 * 1024 * 1024;
-const SCREENS = ['s-login','s-profile','s-extra','s-home','s-form','s-done','s-staff'];
+const SCREENS = ['s-login','s-profile','s-extra','s-sched','s-home','s-form','s-done','s-staff'];
+let mySched = { conf: null, pend: null, rej: null, any: false }, schedSkip = false;
 let user, student, log, myLogs = [], myNotes = [], myRests = [], video = null, myArch = {}, myPArch = {}; // video = {blob, type, name} (solo para la vista previa local)
 
 const ERR = {
@@ -33,7 +34,18 @@ const ERR = {
   TEXTO_DEMASIADO_LARGO: 'Uno de los textos es demasiado largo.',
   ENCARGADO_REQUERIDO: 'Escriba el nombre del encargado de su práctica.',
   DATO_YA_REGISTRADO: 'Ese dato ya está registrado y no se puede cambiar desde aquí. Si hay un error, avise a su supervisor de práctica.',
-  NADA_QUE_COMPLETAR: 'Escriba el dato que falta.'
+  NADA_QUE_COMPLETAR: 'Escriba el dato que falta.',
+  HORARIO_INVALIDO: 'El horario no es válido: revise las horas y el almuerzo de cada día.',
+  HORARIO_VACIO: 'Marque al menos un día de trabajo.',
+  HORARIO_SIN_CAMBIOS: 'Ese horario es igual al que ya tiene confirmado.',
+  ENTRADA_ANTICIPADA_PREGUNTA: 'Llegó antes de su horario. Indique si es tiempo extra.',
+  EXTRA_MOTIVO_REQUERIDO: 'Explique el tiempo extra (mínimo 10 caracteres).',
+  ENTRADA_TARDIA_MOTIVO_REQUERIDO: 'Explique por qué registra tarde (mínimo 10 caracteres).',
+  HORA_DECLARADA_INVALIDA: 'La hora indicada no es válida: debe ser de ese mismo día, posterior a la entrada y no futura.',
+  SALIDA_TARDIA_PREGUNTA: 'Cierra después de su horario. Indique si fue tiempo extra.',
+  SALIDA_DECLARADA_REQUERIDA: 'Indique a qué hora terminó realmente.',
+  SALIDA_DECLARADA_MOTIVO_REQUERIDO: 'Explique por qué no cerró a tiempo (mínimo 10 caracteres).',
+  SALIDA_ANTICIPADA_MOTIVO_REQUERIDO: 'Explique por qué sale antes de su horario (mínimo 10 caracteres).'
 };
 const msg = t => { $('msg').textContent = t || ''; };
 const errMsg = e => { const m = e?.message || String(e);
@@ -80,16 +92,20 @@ async function route() {
     myArch = Object.fromEntries((ar.error ? [] : ar.data || []).filter(a => a.removed_at).map(a => [a.log_id, true])); } catch { myArch = {}; }
   try { const pr = await sb.from('photo_archive').select('log_id,removed_at').limit(2000);   // fotos de inicio archivadas (migracion_v10)
     myPArch = Object.fromEntries((pr.error ? [] : pr.data || []).filter(a => a.removed_at).map(a => [a.log_id, true])); } catch { myPArch = {}; }
+  try { const sr = await sb.from('schedule_versions').select('*').eq('student_id', user.id).order('created_at', { ascending: false }).limit(30);
+    mySched = schedState(sr.error ? [] : sr.data || []); } catch { mySched = schedState([]); }   // migracion_v14: si aún no existe, rige la regla anterior
   setWho(); setTitle(student.program);
   showAvatars();
   if (log?.status === 'in_progress') {
     const late = log.practice_date < todayGT();
     $('late-box').classList.toggle('hidden', !late); $('late-date').textContent = fmtDate(log.practice_date);
-    $('started').textContent = `Jornada iniciada a las ${fmtTime(log.entry_at)} (${fmtDate(log.practice_date)})`;
+    $('started').textContent = `Jornada iniciada a las ${fmtTime(log.entry_at)} (${fmtDate(log.practice_date)})` + (log.sched_start ? `. Su horario de ese día: ${f12(log.sched_start)} a ${f12(log.sched_end)}.` : '');
     renderEvidence();
     return show('s-form');
   }
   if (log?.practice_date === todayGT()) return showReceipt();
+  if (!mySched.any && !schedSkip && student.active !== false) return openSched();
+  renderSchedCard();
   $('today').textContent = fmtDate(todayGT());
   const rt = myRests.find(r => r.rest_date === todayGT());   // el servidor también lo impide (DIA_DE_DESCANSO)
   $('b-start').classList.toggle('hidden', !!rt); $('start-box').classList.toggle('hidden', !!rt);
@@ -105,8 +121,9 @@ function showReceipt() {
     ['Entrada', fmtTime(log.entry_at)], ['Salida', fmtTime(log.exit_at)], ['Dirección de la empresa', log.practice_place],
     ['Actividad principal', log.main_activity],
     ['Evidencia', log.start_photo_path ? 'Foto de inicio y video cargados correctamente' : 'Video cargado correctamente']];
-  const hm = Horas.minutes(log); if (hm !== null) rows.splice(4, 0, ['Horas de hoy', Horas.fHM(hm) + (hm > Horas.JORNADA_MIN ? ` (+${Horas.fHM(hm - Horas.JORNADA_MIN)} extra)` : '') + ', sin almuerzo']);
+  const hm = Horas.minutes(log); if (hm !== null) rows.splice(4, 0, ['Horas de hoy', Horas.fHM(hm) + (hm > Horas.jornada(log.practice_date) ? ` (+${Horas.fHM(hm - Horas.jornada(log.practice_date))} extra)` : '') + ', sin almuerzo']);
   if (log.closed_late) rows.splice(4, 0, ['Cierre', 'Tardío (jornada de un día anterior)']);
+  kindRows(log).forEach(r => rows.push(r));
   const dl = $('receipt'); dl.replaceChildren();
   rows.forEach(([k, v]) => { const dt = document.createElement('dt'), dd = document.createElement('dd');
     dt.textContent = k; dd.textContent = v; dl.append(dt, dd); });
@@ -247,16 +264,16 @@ function renderWarns() {
         (lg ? ` · sobre la jornada del ${fmtDate(lg.practice_date)}` : '') }),
       el('p', { textContent: n.note }))); });
 }
-const chips = x => { const m = Horas.minutes(x); if (m === null) return '';
-  return el('span', { className: 'hrs' }, el('i', { className: 'hc ' + (m >= Horas.JORNADA_MIN ? 'ok' : 'low'), textContent: Horas.fHM(m) }),
-    m > Horas.JORNADA_MIN ? el('i', { className: 'hc xtra', textContent: '+' + Horas.fHM(m - Horas.JORNADA_MIN) + ' extra' }) : ''); };
+const chips = x => { const m = Horas.minutes(x); if (m === null) { const rv = Horas.review(x); return rv ? el('span', { className: 'hrs' }, el('i', { className: 'hc ' + (rv === 'pending' ? 'rev' : 'rej'), textContent: rv === 'pending' ? 'Hora en revisión' : 'Hora rechazada' })) : ''; }
+  return el('span', { className: 'hrs' }, el('i', { className: 'hc ' + (m >= Horas.jornada(x.practice_date) ? 'ok' : 'low'), textContent: Horas.fHM(m) }),
+    m > Horas.jornada(x.practice_date) ? el('i', { className: 'hc xtra', textContent: '+' + Horas.fHM(m - Horas.jornada(x.practice_date)) + ' extra' }) : ''); };
 function renderHours() {
   const box = $('hrs-card'); box.replaceChildren(); const hs = Horas.summarize(myLogs);
   if (!myLogs.length) return;
   const f = (v, k, c) => el('div', { className: 'hf ' + c }, el('b', { textContent: v }), el('span', { textContent: k }));
   box.append(el('h3', { textContent: 'Mis horas' }),
     el('div', { className: 'hfs' }, f(Horas.fHM(hs.total), 'horas acumuladas', 'hfg'), f(hs.over ? '+' + Horas.fHM(hs.over) : '0 h', 'horas extra acumuladas', 'hfb'), f(String(hs.days), 'jornadas contadas', '')),
-    el('p', { className: 'info', textContent: 'Cada jornada se cuenta sin la hora de almuerzo. Es hora extra lo que pasa de 8 horas en un día. No suman las jornadas sin cerrar, no concluidas o cerradas tarde.' }),
+    el('p', { className: 'info', textContent: 'Cada jornada se cuenta sin la hora de almuerzo. Es hora extra lo que pasa de 8 horas en un día (4 horas los sábados), antes o después de su horario. No suman las jornadas sin cerrar, no concluidas o cerradas tarde.' }),
     el('a', { className: 'btn sec', href: 'informe.html?s=' + user.id, target: '_blank', rel: 'noopener', textContent: 'Ver mi informe (carta)' }));
 }
 function renderHist() {
@@ -274,6 +291,7 @@ function renderHist() {
       textContent: 'Ver foto de inicio', onclick: () => viewPhoto(x.start_photo_path, 'Foto de inicio') })));
     const un = x.status === 'unclosed';
     if (un) { row('Estado', 'Jornada no concluida: la cerró el administrador', 'bad'); row('Motivo', x.admin_note, 'bad'); }
+    kindRows(x).forEach(r => row(r[0], r[1], r[2]));
     if (x.closed_late) { row('Cierre tardío', 'Se cerró después del día de la práctica'); row('Motivo del retraso', x.late_reason); }
     if (x.video_path && myArch[x.id]) row('Video de evidencia', 'Archivado por la institución; ya no se puede ver desde aquí.');
     else if (x.video_path) body.append(el('dt', { textContent: 'Video de evidencia' }), el('dd', {}, el('button', { type: 'button', className: 'sec',
@@ -282,7 +300,7 @@ function renderHist() {
     box.append(el('details', { className: 'hl' }, el('summary', {},
       el('div', { className: 'hd', textContent: d.toLocaleDateString('es-GT', { weekday: 'short', day: 'numeric', month: 'short' }) }),
       el('div', { className: 'hm' }, el('b', { textContent: x.main_activity || (un ? 'Jornada no concluida' : 'Jornada en curso') }),
-        el('span', { textContent: `Entrada ${fmtTime(x.entry_at)}, salida ${x.exit_at ? fmtTime(x.exit_at) : '—'}` }),
+        el('span', { textContent: `Entrada ${fmtTime(Horas.times(x)?.entry || x.entry_at)}, salida ${x.exit_at ? fmtTime(Horas.times(x)?.exit || x.exit_at) : '—'}` }),
         chips(x),
         un ? el('span', { className: 'tg', textContent: 'No concluida' }) : '',
         x.closed_late ? el('span', { className: 'tg2', textContent: 'Cierre tardío' }) : '',
@@ -425,13 +443,23 @@ $('pic-shot').onclick = async () => {
   closePic(); $('sp-file').value = ''; setStartPhoto(blob); };
 $('b-start').onclick = async () => {
   if (!startPhoto) return msg('Tome la foto de inicio antes de iniciar la jornada.');
-  const btn = $('b-start'); btn.disabled = true; btn.textContent = 'Subiendo foto…'; msg('');
-  const path = `${user.id}/${todayGT()}/start-${crypto.randomUUID()}.jpg`;
+  const btn = $('b-start'); btn.disabled = true; msg('');
   try {
-    const up = await sb.storage.from(PH).upload(path, startPhoto, { contentType: 'image/jpeg', upsert: false });
-    if (up.error) throw up.error;                    // si falla la subida NO se inicia la jornada
-    const { error } = await sb.rpc('start_workday', { p_photo_path: path });
-    if (error) { await sb.storage.from(PH).remove([path]); throw error; }   // limpia el huérfano
+    let force = null, error;
+    for (let k = 0; k < 2; k++) {
+      const q = await askStart(force); if (!q) return;   // canceló: no se sube nada
+      btn.textContent = 'Subiendo foto…';
+      const path = `${user.id}/${todayGT()}/start-${crypto.randomUUID()}.jpg`;
+      const up = await sb.storage.from(PH).upload(path, startPhoto, { contentType: 'image/jpeg', upsert: false });
+      if (up.error) throw up.error;                    // si falla la subida NO se inicia la jornada
+      ({ error } = await sb.rpc('start_workday', { p_photo_path: path, ...q }));
+      if (!error) break;
+      await sb.storage.from(PH).remove([path]);   // limpia el huérfano
+      const m = error.message || '';   // el reloj del dispositivo no coincide con el del servidor: se pregunta otra vez
+      if (k === 0 && /ENTRADA_ANTICIPADA_PREGUNTA|EXTRA_MOTIVO_REQUERIDO/.test(m)) force = 'early';
+      else if (k === 0 && /ENTRADA_TARDIA_MOTIVO_REQUERIDO/.test(m)) force = 'late';
+      else throw error;
+    }
     startPhoto = null; $('sp-file').value = ''; $('sp-prev').classList.add('hidden');
     $('sp-info').textContent = 'Tome una foto en su lugar de práctica para poder iniciar la jornada.';
     route();
@@ -537,19 +565,202 @@ $('f-log').onsubmit = async e => { e.preventDefault(); msg('');
   if (late && val('a-late').length < 10) { $('a-late').focus(); return msg(ERR.MOTIVO_TARDIO_REQUERIDO); }
   if (!log.video_path) { $('ev-card').scrollIntoView?.({ behavior: 'smooth', block: 'start' }); return msg(ERR.VIDEO_REQUERIDO); }
   if (inc && (!val('i-desc') || !radio('rep'))) return msg(ERR.INCIDENTE_INCOMPLETO);
-  const btn = $('b-send'); btn.disabled = true; btn.textContent = 'Registrando bitácora…';
+  const btn = $('b-send'); btn.disabled = true;
   try {
-    const { data, error } = await sb.rpc('submit_workday', {
+    let force = null, data, error, q;
+    for (let k = 0; k < 2; k++) {
+      q = await askClose(force); if (!q) return;   // canceló
+      btn.textContent = 'Registrando bitácora…';
+      ({ data, error } = await sb.rpc('submit_workday', {
       p_activities: val('a-act'), p_main_activity: val('a-main'), p_learning: val('a-learn'),
       p_tools_used: val('a-tools') || null, p_supervised: radio('sup') === '1',
       p_has_incident: inc, p_incident_description: inc ? val('i-desc') : null,
       p_incident_reported: inc ? radio('rep') === '1' : null,
-      p_video_path: null, p_video_original_name: null, p_late_reason: late ? val('a-late') : null });
+      p_video_path: null, p_video_original_name: null, p_late_reason: late ? val('a-late') : null, ...q }));
+      if (!error) break;
+      const m = error.message || '';
+      if (k === 0 && /SALIDA_TARDIA_PREGUNTA|EXTRA_MOTIVO_REQUERIDO/.test(m)) force = 'after';
+      else if (k === 0 && /SALIDA_ANTICIPADA_MOTIVO_REQUERIDO/.test(m)) force = 'before';
+      else if (k === 0 && /SALIDA_DECLARADA/.test(m)) force = 'declare';
+      else throw error;
+    }
     if (error) throw error;
     log = data; myLogs = [data, ...myLogs.filter(x => x.id !== data.id)]; video = null; showReceipt();
   } catch (err) { fail(err); }
   finally { btn.disabled = false; btn.textContent = 'Finalizar y enviar bitácora'; }
 };
+
+// ---- Horario semanal, margen de 20 minutos y tiempo extra (migracion_v14) ----
+const DIAS = [['1', 'Lunes'], ['2', 'Martes'], ['3', 'Miércoles'], ['4', 'Jueves'], ['5', 'Viernes'], ['6', 'Sábado'], ['0', 'Domingo']];
+const minOf = t => { const [a, b] = t.split(':'); return +a * 60 + +b; };
+const f12 = t => { const [a, b] = t.split(':').map(Number); return `${a % 12 || 12}:${String(b).padStart(2, '0')} ${a < 12 ? 'a. m.' : 'p. m.'}`; };
+const gtNowMin = () => { const p = new Intl.DateTimeFormat('en-GB', { timeZone: TZ, hour12: false, hour: '2-digit', minute: '2-digit' }).format(new Date()).split(':'); return (+p[0] % 24) * 60 + +p[1]; };
+const gtAt = (date, hhmm) => `${date}T${hhmm}:00-06:00`;   // Guatemala es UTC−6 todo el año
+const schedState = rows => {
+  const conf = rows.filter(r => r.status === 'confirmed').sort((a, b) => new Date(b.decided_at) - new Date(a.decided_at))[0] || null;
+  return { conf, pend: rows.find(r => r.status === 'pending') || null, rej: rows[0]?.status === 'rejected' ? rows[0] : null, any: rows.length > 0 };
+};
+const schedDay = date => mySched.conf?.days?.[String(new Date(date + 'T12:00:00Z').getUTCDay())] || null;
+const netMin = d => minOf(d.e) - minOf(d.s) - (+d.l || 0);
+
+function schedTable(days) {
+  const dl = el('dl', { className: 'sdone' });
+  DIAS.forEach(([k, n]) => { const d = days?.[k]; if (d) dl.append(el('b', { textContent: n }), el('span', { textContent: `${f12(d.s)} a ${f12(d.e)}, almuerzo ${d.l} min (${Horas.fHM(netMin(d))} netas)` })); });
+  return dl;
+}
+function renderSchedCard() {
+  const c = $('sched-card'); c.replaceChildren();
+  const { conf, pend, rej } = mySched;
+  c.append(el('b', { textContent: 'Mi horario semanal' }));
+  if (conf) c.append(schedTable(conf.days));
+  if (pend) c.append(el('p', { className: 'info', textContent: 'Tiene un horario nuevo pendiente de confirmación. Mientras tanto rige el anterior.' }));
+  else if (rej) c.append(el('p', { className: 'info', textContent: 'Su último horario fue rechazado: ' + (rej.decision_note || 'sin motivo') + '. Corríjalo y envíelo de nuevo.' }));
+  else if (!conf) c.append(el('p', { className: 'info', textContent: 'Aún no ha definido su horario.' }));
+  else if (conf && !pend) c.append(el('p', { className: 'info', textContent: 'Confirmado por el equipo de supervisión.' }));
+  c.append(el('button', { type: 'button', className: 'sec small', textContent: conf || pend ? 'Cambiar mi horario' : 'Definir mi horario', onclick: openSched }));
+  c.classList.remove('hidden');
+}
+function openSched() {
+  const base = mySched.pend?.days || mySched.conf?.days || {};
+  const box = $('sc-rows'); box.replaceChildren();
+  DIAS.forEach(([k, n]) => {
+    const d = base[k], on = !!d;
+    const cb = el('input', { type: 'checkbox', id: 'sc-on' + k, checked: on });
+    const s = el('input', { type: 'time', id: 'sc-s' + k, value: d?.s || '07:00' });
+    const e = el('input', { type: 'time', id: 'sc-e' + k, value: d?.e || (k === '6' ? '12:00' : '17:00') });
+    const l = el('select', { id: 'sc-l' + k }, [0, 30, 45, 60, 90, 120].map(v => el('option', { value: v, textContent: v ? v + ' min' : 'Sin almuerzo', selected: v === (d ? +d.l : (k === '6' ? 0 : 60)) })));
+    const note = el('p', { className: 'sdn', id: 'sc-n' + k });
+    const f = el('div', { className: 'sdf' }, el('div', {}, el('label', { textContent: 'Entrada' }), s), el('div', {}, el('label', { textContent: 'Salida' }), e), el('div', {}, el('label', { textContent: 'Almuerzo' }), l));
+    const upd = () => { f.classList.toggle('hidden', !cb.checked); note.classList.toggle('hidden', !cb.checked);
+      const bad = !s.value || !e.value || minOf(e.value) - minOf(s.value) - +l.value < 60;
+      note.textContent = !s.value || !e.value ? '' : bad ? 'La jornada neta debe ser de al menos 1 hora, dentro del mismo día.' : 'Jornada neta: ' + Horas.fHM(minOf(e.value) - minOf(s.value) - +l.value);
+      note.classList.toggle('bad', bad && cb.checked); totals(); };
+    [cb, s, e, l].forEach(x => x.oninput = x.onchange = upd);
+    box.append(el('div', { className: 'sd', id: 'sd' + k }, el('label', {}, cb, el('span', { textContent: n })), f, note)); upd();
+  });
+  function totals() { let t = 0, n = 0; DIAS.forEach(([k]) => { if ($('sc-on' + k)?.checked && $('sc-s' + k).value && $('sc-e' + k).value) { t += Math.max(0, minOf($('sc-e' + k).value) - minOf($('sc-s' + k).value) - +$('sc-l' + k).value); n++; } });
+    $('sc-note').textContent = n ? `${n} día${n > 1 ? 's' : ''} por semana, ${Horas.fHM(t)} netas en total.` : 'Marque los días que trabaja.'; }
+  totals();
+  $('sc-skip').textContent = mySched.any ? 'Cancelar' : 'Ahora no';
+  show('s-sched');
+}
+$('sc-copy').onclick = () => { ['2', '3', '4', '5'].forEach(k => { $('sc-on' + k).checked = $('sc-on1').checked;
+  $('sc-s' + k).value = $('sc-s1').value; $('sc-e' + k).value = $('sc-e1').value; $('sc-l' + k).value = $('sc-l1').value; $('sc-on' + k).dispatchEvent(new Event('change')); }); };
+$('sc-skip').onclick = () => { schedSkip = true; route(); };
+$('f-sched').onsubmit = async e => { e.preventDefault(); msg('');
+  const days = {};
+  for (const [k, n] of DIAS) { if (!$('sc-on' + k).checked) continue;
+    const d = { s: $('sc-s' + k).value, e: $('sc-e' + k).value, l: +$('sc-l' + k).value };
+    if (!d.s || !d.e || netMin(d) < 60) { $('sd' + k).scrollIntoView?.({ block: 'center' }); return msg(`${n}: la jornada neta debe ser de al menos 1 hora y terminar el mismo día.`); }
+    days[k] = d; }
+  if (!Object.keys(days).length) return msg(ERR.HORARIO_VACIO);
+  const btn = $('sc-send'); btn.disabled = true;
+  const { error } = await sb.rpc('save_my_schedule', { p_days: days });
+  btn.disabled = false; if (error) return fail(error);
+  await route(); msg('Horario enviado. Lo confirmará el equipo de supervisión.'); };
+
+// Pregunta en una ventana: nodes = contenido; validate() devuelve el resultado o { error }
+function ask(title, nodes, validate) {
+  return new Promise(res => {
+    const err = el('p', { className: 'mer hidden' }), d = el('dialog', { className: 'mdlg' });
+    const f = el('form', {}, el('h3', { textContent: title }), ...nodes, err,
+      el('div', { className: 'macts' }, el('button', { type: 'button', className: 'sec', textContent: 'Cancelar', onclick: () => d.close() }), el('button', { textContent: 'Continuar' })));
+    f.onsubmit = ev => { ev.preventDefault(); const r = validate();
+      if (r?.error) { err.textContent = r.error; err.classList.remove('hidden'); return; }
+      d.close(); res(r); };
+    d.addEventListener('close', () => { d.remove(); res(null); });
+    d.append(f); document.body.append(d); d.showModal(); });
+}
+const area = (id, lab) => [el('label', { textContent: lab, htmlFor: id }), el('textarea', { id, maxLength: 1000 })];
+const yesNo = (name, a, b, onchg) => { const w = el('div', { className: 'opts' },
+  el('label', {}, el('input', { type: 'radio', name, value: '1' }), a), el('label', {}, el('input', { type: 'radio', name, value: '0' }), b));
+  w.onchange = onchg; return w; };
+const rv = name => document.querySelector(`.mdlg input[name=${name}]:checked`)?.value;
+const mins = n => n >= 60 ? Horas.fHM(n) : n + ' min';
+
+// Antes de iniciar: ¿llega dentro de ±20 min de su horario? Devuelve los parámetros del servidor, {} si no hay nada que preguntar, o null si cancela.
+async function askStart(force) {
+  const d = schedDay(todayGT()); if (!d) return {};
+  const diff = gtNowMin() - minOf(d.s), mode = force || (Math.abs(diff) <= Horas.TOL_MIN ? 'ok' : diff < 0 ? 'early' : 'late');
+  if (mode === 'ok') return {};
+  if (mode === 'early') {
+    const [lbl, ta] = area('mx-r', 'Explique qué hará en ese tiempo extra'); const box = el('div', { className: 'hidden' }, lbl, ta);
+    const nb = el('p', { className: 'info hidden', textContent: `Su jornada se contará desde las ${f12(d.s)}, la hora de su horario.` });
+    const yn = yesNo('mx', 'Sí, es tiempo extra', 'No, solo llegué temprano', () => { box.classList.toggle('hidden', rv('mx') !== '1'); nb.classList.toggle('hidden', rv('mx') !== '0'); });
+    return ask('Llegó antes de su horario', [el('p', { className: 'info', textContent: `Su horario de hoy empieza a las ${f12(d.s)} ¿Va a trabajar este tiempo extra?` }), yn, box, nb], () => {
+      const x = rv('mx'); if (!x) return { error: 'Elija una opción.' };
+      if (x === '0') return { p_extra: false };
+      if (ta.value.trim().length < 10) return { error: 'Explique el tiempo extra (mínimo 10 caracteres).' };
+      return { p_extra: true, p_reason: ta.value.trim() }; });
+  }
+  const [lbl, ta] = area('mx-r', '¿Por qué registra tarde?'), tm = el('input', { type: 'time', id: 'mx-t' });
+  const ck = el('input', { type: 'checkbox' }), tb = el('div', { className: 'hidden' }, el('label', { textContent: '¿A qué hora llegó realmente?', htmlFor: 'mx-t' }), tm,
+    el('p', { className: 'info', textContent: 'Esta hora la revisa el equipo de supervisión.' }));
+  ck.onchange = () => tb.classList.toggle('hidden', !ck.checked);
+  return ask('Registro fuera de su horario', [el('p', { className: 'info', textContent: `Su horario de hoy empezaba a las ${f12(d.s)} y ya pasaron ${mins(diff)}.` }), ...[lbl, ta],
+    el('label', { className: 'ck' }, ck, 'Llegué a tiempo y olvidé registrarme'), tb], () => {
+    if (ta.value.trim().length < 10) return { error: 'Explique el motivo (mínimo 10 caracteres).' };
+    const r = { p_extra: null, p_reason: ta.value.trim() };
+    if (ck.checked) { if (!tm.value) return { error: 'Indique la hora real de llegada.' };
+      if (minOf(tm.value) > gtNowMin()) return { error: 'La hora de llegada no puede ser futura.' };
+      r.p_declared_at = gtAt(todayGT(), tm.value); }
+    return r; });
+}
+
+// Antes de cerrar: salida dentro de ±20 min del horario de esa jornada, tardía (otro día) o anticipada.
+async function askClose(force) {
+  const sEnd = log.sched_end; if (!sEnd) return {};
+  const lateDay = log.practice_date < todayGT(), diff = gtNowMin() - minOf(sEnd);
+  const mode = lateDay ? 'declare' : force || (Math.abs(diff) <= Horas.TOL_MIN ? 'ok' : diff > 0 ? 'after' : 'before');
+  if (mode === 'ok') return {};
+  const ent = new Date(log.entry_adj_at || log.entry_at);
+  const when = lateDay ? log.practice_date : todayGT();
+  const realExit = (tm, needReason, ta) => { if (!tm.value) return { error: 'Indique la hora real de salida.' };
+    const at = new Date(gtAt(when, tm.value));
+    if (!(at > ent)) return { error: 'La salida debe ser posterior a la entrada.' };
+    if (at > new Date()) return { error: 'La hora de salida no puede ser futura.' };
+    if (at - ent > 16 * 3600e3) return { error: 'La jornada no puede durar más de 16 horas.' };
+    if (needReason && ta.value.trim().length < 10) return { error: 'Explique el motivo (mínimo 10 caracteres).' };
+    const r = { p_extra: null, p_declared_at: gtAt(when, tm.value) }; if (needReason) { r.p_extra = false; r.p_reason = ta.value.trim(); } return r; };
+  if (mode === 'declare') {
+    const tm = el('input', { type: 'time', id: 'mx-t', value: sEnd }), [lbl, ta] = area('mx-r', 'Motivo de no haber cerrado a tiempo');
+    const need = !lateDay;
+    return ask(lateDay ? 'Hora real de salida' : 'Cierre fuera de su horario', [el('p', { className: 'info', textContent: lateDay ? `Esta jornada era del ${fmtDate(log.practice_date)} y su horario terminaba a las ${f12(sEnd)} Indique a qué hora terminó realmente; la revisa el equipo de supervisión si se aleja de su horario.` : `Su horario terminaba a las ${f12(sEnd)} Indique a qué hora terminó realmente.` }),
+      el('label', { textContent: '¿A qué hora terminó?', htmlFor: 'mx-t' }), tm, ...(need ? [lbl, ta] : [])], () => realExit(tm, need, ta));
+  }
+  if (mode === 'before') {
+    const [lbl, ta] = area('mx-r', `¿Por qué sale antes de las ${f12(sEnd)}?`);
+    return ask('Sale antes de su horario', [el('p', { className: 'info', textContent: `Su horario terminaba a las ${f12(sEnd)}` }), lbl, ta], () =>
+      ta.value.trim().length < 10 ? { error: 'Explique el motivo (mínimo 10 caracteres).' } : { p_reason: ta.value.trim() });
+  }
+  const [l1, t1] = area('mx-r', 'Explique qué hizo en ese tiempo extra'), box = el('div', { className: 'hidden' }, l1, t1);
+  const tm = el('input', { type: 'time', id: 'mx-t' }), [l2, t2] = area('mx-r2', 'Motivo de no haber cerrado a tiempo');
+  const box2 = el('div', { className: 'hidden' }, el('label', { textContent: '¿A qué hora terminó realmente?', htmlFor: 'mx-t' }), tm, l2, t2);
+  const yn = yesNo('mx', 'Sí, trabajé tiempo extra', 'No, olvidé cerrar', () => { box.classList.toggle('hidden', rv('mx') !== '1'); box2.classList.toggle('hidden', rv('mx') !== '0'); });
+  return ask('Cierra después de su horario', [el('p', { className: 'info', textContent: `Su horario terminaba a las ${f12(sEnd)} ¿Trabajó tiempo extra?` }), yn, box, box2], () => {
+    const x = rv('mx'); if (!x) return { error: 'Elija una opción.' };
+    if (x === '1') return t1.value.trim().length < 10 ? { error: 'Explique el tiempo extra (mínimo 10 caracteres).' } : { p_extra: true, p_reason: t1.value.trim() };
+    return realExit(tm, true, t2); });
+}
+
+// Textos de cómo se registró la entrada y la salida (recibo e historial)
+const ADJ = { pending: 'en revisión', approved: 'aprobada', auto: 'aprobada', rejected: 'rechazada' };
+function kindRows(x) {
+  const out = [];
+  if (x.sched_start) out.push(['Horario de ese día', `${f12(x.sched_start)} a ${f12(x.sched_end)}, almuerzo ${x.sched_lunch ?? 0} min`]);
+  const side = (kind, reason, adj, st, note, n) => {
+    if (!kind) return;
+    const bad = st === 'rejected' ? 'bad' : '';
+    const t = { extra_antes: `${n} anticipada: tiempo extra`, anticipado: n === 'Entrada' ? `Entrada anticipada: se cuenta desde las ${f12(x.sched_start)}` : 'Salida anticipada',
+      tardio: n === 'Entrada' ? 'Entrada registrada tarde' : 'Cierre fuera de horario', declarada: `${n} declarada: ${adj ? fmtTime(adj) : ''} (${ADJ[st] || ''})`,
+      extra_despues: 'Salida con tiempo extra', cierre_tardio: `Salida declarada: ${adj ? fmtTime(adj) : ''} (${ADJ[st] || ''})` }[kind];
+    const lb = n === 'Entrada' ? 'Registro de entrada' : 'Registro de salida';
+    if (kind === 'tardio' && n === 'Salida' && adj) out.push([lb, `Salida declarada: ${fmtTime(adj)} (${ADJ[st] || ''})`, bad]); else if (t) out.push([lb, t, bad]);
+    if (reason) out.push(['Motivo', reason, bad]); if (st === 'rejected' && note) out.push(['Respuesta del equipo', note, 'bad']); };
+  side(x.entry_kind, x.entry_reason, x.entry_adj_at, x.entry_adj_status, x.entry_note, 'Entrada');
+  side(x.exit_kind, x.exit_reason, x.exit_adj_at, x.exit_adj_status, x.exit_note, 'Salida');
+  return out;
+}
 
 sb.auth.onAuthStateChange((ev) => { if (ev === 'SIGNED_OUT') route(); });
 route();

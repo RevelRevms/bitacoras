@@ -2,7 +2,7 @@
 <html lang="es"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Bitácora de práctica supervisada</title>
-<link rel="stylesheet" href="styles.css?v=18"></head><body><header class="top"><h1>Bitácora<span id="ttl-sub">de práctica supervisada</span></h1></header><main class="sheet">
+<link rel="stylesheet" href="styles.css?v=20"></head><body><header class="top"><h1>Bitácora<span id="ttl-sub">de práctica supervisada</span></h1></header><main class="sheet">
 <div id="msg" class="err" role="alert"></div>
 
 <section id="s-login" class="card hidden"><h2 class="cover">Registre su jornada de hoy</h2><p class="info">Entre con el correo y la contraseña que le dio su administrador.</p><form id="f-login">
@@ -44,9 +44,16 @@
 <p class="info">Se mostrará en el sistema junto a su nombre. Use una foto de su rostro, sin otras personas.</p></div>
 <button>Guardar y continuar</button></form></section>
 
+<section id="s-sched" class="card hidden"><h2 class="cover">Mi horario semanal</h2>
+<p class="info">Escriba el horario que le dio su empresa. Marque los días que trabaja, la hora de entrada y de salida, y el tiempo de almuerzo. Un supervisor lo confirmará. Los registros que haga dentro de 20 minutos de su horario no necesitan explicación.</p>
+<form id="f-sched"><div id="sc-rows"></div>
+<button type="button" id="sc-copy" class="sec small">Copiar el lunes a lunes–viernes</button>
+<p id="sc-note" class="info"></p>
+<button id="sc-send">Enviar horario</button><button type="button" id="sc-skip" class="sec">Ahora no</button></form></section>
+
 <section id="s-home" class="card hidden"><div class="me"><div id="me-av" class="av"></div><div id="who" class="info"></div></div>
 <button type="button" id="b-avchg" class="sec small chg-av">Cambiar mi foto de perfil</button><input id="av-chg" type="file" accept="image/*" class="hidden">
-<p id="today" class="today"></p><p id="rest-today" class="notice restnow hidden"></p>
+<div id="sched-card" class="notice hidden"></div><p id="today" class="today"></p><p id="rest-today" class="notice restnow hidden"></p>
 <p id="inactive-note" class="notice bad hidden"><b>Su cuenta está inactiva.</b> No puede iniciar nuevas jornadas. Puede consultar su historial. Si cree que es un error, hable con su administrador.</p>
 <div id="start-box"><h2 class="eh">Foto de inicio de jornada</h2>
 <p class="notice"><b>Importante:</b> no fotografíe información, documentos, pantallas o áreas que la empresa o institución no permita mostrar, ni a ninguna persona sin su consentimiento previo.</p>
@@ -122,4 +129,4 @@
 <button type="button" id="pic-cancel" class="sec">Cancelar</button>
 </div></div></div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="ojo.js?v=3"></script><script src="supabase-config.js?v=8"></script><script src="horas.js?v=2"></script><script src="app.js?v=24"></script></body></html>
+<script src="ojo.js?v=3"></script><script src="supabase-config.js?v=8"></script><script src="horas.js?v=3"></script><script src="app.js?v=25"></script></body></html>

@@ -11,7 +11,13 @@ const fDw = d => new Date(d + 'T12:00:00').toLocaleDateString('es-GT', { weekday
 const fT = d => d ? new Date(d).toLocaleTimeString('es-GT', { timeZone: TZ, hour12: false, hour: '2-digit', minute: '2-digit' }) : '—';
 const fDT = d => new Date(d).toLocaleString('es-GT', { timeZone: TZ, hour12: false, day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 const mon = d => new Date(d.slice(0, 7) + '-15T12:00:00').toLocaleDateString('es-GT', { month: 'long', year: 'numeric' });
-const J = Horas.JORNADA_MIN, fHM = Horas.fHM;
+const jd = Horas.jornada, fHM = Horas.fHM;
+// Marcas de horario de una jornada: tiempo extra, llegadas o salidas fuera del horario, horas regularizadas
+const KE = { extra_antes: 'Tiempo extra al entrar', anticipado: 'Llegó antes del horario', tardio: 'Llegada tardía', declarada: 'Entrada regularizada' };
+const KX = { extra_despues: 'Tiempo extra al salir', anticipado: 'Salida anticipada', tardio: 'Salida regularizada', cierre_tardio: 'Hora de salida declarada' };
+const SV = { approved: ' (aprobada)', auto: '', pending: ' (en revisión)', rejected: ' (rechazada)' };
+const regs = x => [x.entry_kind && KE[x.entry_kind] + (x.entry_kind === 'anticipado' ? '' : SV[x.entry_adj_status] || '') + (x.entry_reason ? ': ' + x.entry_reason : ''),
+  x.exit_kind && KX[x.exit_kind] + (SV[x.exit_adj_status] || '') + (x.exit_reason ? ': ' + x.exit_reason : '')].filter(Boolean);
 // «Volver» cierra esta pestaña (el panel sigue abierto en la otra). Si el navegador no deja cerrarla, abre el panel aquí.
 let HOME = 'admin.html', STUDENT = false;
 if (new URLSearchParams(location.search).get('embed')) document.documentElement.classList.add('embed');
@@ -54,10 +60,10 @@ function chart(rows) {
   const bw = Math.min(22, w / Math.max(rows.length, 1) * .72), step = w / Math.max(rows.length, 1);
   rows.forEach((r, i) => { const cx = pl + step * i + step / 2, x = cx - bw / 2;
     if (r.m === null) { svg.append(sv('rect', { x, y: y(1), width: bw, height: y(0) - y(1), class: 'miss' })); return; }
-    const base = Math.min(r.m, J) / 60, ex = Math.max(0, r.m - J) / 60;
+    const J = jd(r.d), base = Math.min(r.m, J) / 60, ex = Math.max(0, r.m - J) / 60;
     svg.append(sv('rect', { x, y: y(base), width: bw, height: y(0) - y(base), class: r.m >= J ? 'ok' : 'low' }));
     if (ex) svg.append(sv('rect', { x, y: y(base + ex), width: bw, height: y(base) - y(base + ex), class: 'xt' })); });
-  svg.append(sv('line', { x1: pl, x2: W - pr, y1: y(8), y2: y(8), class: 'ref' }), sv('text', { x: W - pr, y: y(8) - 4, class: 'ax', 'text-anchor': 'end' }, 'Jornada de 8 h'));
+  svg.append(sv('line', { x1: pl, x2: W - pr, y1: y(8), y2: y(8), class: 'ref' }), sv('text', { x: W - pr, y: y(8) - 4, class: 'ax', 'text-anchor': 'end' }, 'Jornada de 8 h (4 h los sábados)'));
   const every = Math.max(1, Math.ceil(rows.length / 8));
   rows.forEach((r, i) => { if (i % every === 0) svg.append(sv('text', { x: pl + step * i + step / 2, y: H - 8, class: 'ax', 'text-anchor': 'middle' },
     new Date(r.d + 'T12:00:00').toLocaleDateString('es-GT', { day: 'numeric', month: 'short' }))); });
@@ -73,7 +79,7 @@ function draw() {
   const kp = (v, k, c = '') => h('div', { className: 'kp ' + c }, h('b', { textContent: v }), h('span', { textContent: k }));
   const lp = S.program, root = $('rep'); root.replaceChildren();
   const bymonth = {}; A.forEach(x => { const k = x.practice_date.slice(0, 7), m = Horas.minutes(x), o = bymonth[k] ||= { n: 0, t: 0, e: 0, i: 0, f: 0 };
-    if (m !== null) { o.n++; o.t += m; o.e += Math.max(0, m - J); } if (x.has_incident) o.i++; if (x.status === 'unclosed' || x.closed_late) o.f++; });
+    if (m !== null) { o.n++; o.t += m; o.e += Math.max(0, m - jd(x.practice_date)); } if (x.has_incident) o.i++; if (x.status === 'unclosed' || x.closed_late) o.f++; });
 
   root.append(filtros(),
     h('section', { className: 'page' },
@@ -101,13 +107,14 @@ function draw() {
       nn.map(n => h('div', { className: 'nt ' + n.kind }, h('b', { textContent: (n.kind === 'amonestacion' ? 'Amonestación' : 'Observación') + ' · ' + fDT(n.created_at) }), h('p', { textContent: n.note })))) : '',
     h('section', { className: 'blk' }, h('h3', { textContent: 'Registro diario' }),
       A.length ? h('table', { className: 'tb day' }, h('thead', {}, h('tr', {}, ...['Fecha', 'Entrada', 'Salida', 'Horas netas', 'Extra', 'Detalle'].map((t, i) => h('th', { textContent: t, className: i > 0 && i < 5 ? 'r' : '' })))),
-        h('tbody', {}, A.map(x => { const m = Horas.minutes(x), st = x.status === 'unclosed' ? 'No concluida (cerrada por la administración)' : x.status === 'in_progress' ? (x.practice_date < todayGT() ? 'Sin cerrar' : 'En curso') : x.closed_late ? 'Cierre tardío' : '';
+        h('tbody', {}, A.map(x => { const J = jd(x.practice_date), m = Horas.minutes(x), tm = Horas.times(x), rv = Horas.review(x), rg = regs(x), st = x.status === 'unclosed' ? 'No concluida (cerrada por la administración)' : x.status === 'in_progress' ? (x.practice_date < todayGT() ? 'Sin cerrar' : 'En curso') : x.closed_late ? 'Cierre tardío' : rv === 'pending' ? 'Hora declarada en revisión (no suma horas todavía)' : rv === 'rejected' ? 'Hora declarada rechazada (no suma horas)' : '';
           return h('tr', { className: x.has_incident || st ? 'flag' : '' },
-            h('td', { textContent: fDw(x.practice_date) }), h('td', { className: 'r', textContent: fT(x.entry_at) }),
-            h('td', { className: 'r', textContent: m === null ? '—' : fT(x.exit_at) }),
+            h('td', { textContent: fDw(x.practice_date) }), h('td', { className: 'r', textContent: fT(tm ? tm.entry : x.entry_at) }),
+            h('td', { className: 'r', textContent: m === null ? '—' : fT(tm.exit) }),
             h('td', { className: 'r ' + (m === null ? '' : m >= J ? 'g' : 'a'), textContent: m === null ? '—' : fHM(m) }),
             h('td', { className: 'r b', textContent: m !== null && m > J ? '+' + fHM(m - J) : '' }),
             h('td', {}, st ? h('div', { className: 'st', textContent: st + (x.late_reason ? ': ' + x.late_reason : '') + (x.admin_note ? ': ' + x.admin_note : '') }) : '',
+              rg.length ? h('div', { className: 'rg', textContent: rg.join(' · ') }) : '',
               h('div', { className: 'ma', textContent: x.main_activity || '' }),
               withText && x.activities ? h('div', { className: 'tx' }, h('i', { textContent: 'Actividades: ' }), x.activities) : '',
               withText && x.learning ? h('div', { className: 'tx' }, h('i', { textContent: 'Aprendió: ' }), x.learning) : '',

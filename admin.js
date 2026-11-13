@@ -7,6 +7,7 @@ const unlock = () => { if (!sdlg.open && !document.querySelector('.vmodal,.dlg')
 const REINC_N = 3, REINC_DIAS = 30;
 const PROG = { practica: 'Práctica Supervisada', prepractica: 'Prepráctica' };
 const progName = p => PROG[p] || 'Sin definir';
+let schedVers = [], schedErr = '';
 let students = [], logs = [], notes = [], rests = [], kf = 'active', avs = {};   // el panel abre con «Estudiantes activos» ya pulsado
 let arch = [], archMap = {}, parch = [], pArchMap = {}, pinfo = [], archErr = '', pErr = '', vdBuilt = false, vdUi = {}, vd = { verified: [], failed: [], busy: false, ctrl: null, note: '', skipped: 0 }, vdTo = '';
 let me = null, staffMap = {}, audit = [], accts = [], acErr = '', v4 = true, staffBuilt = false, staffUi = {}, lastCreated = null;   // v4 = ¿ya se ejecutó migracion_v4.sql?   // kf = filtro activo de los indicadores superiores
@@ -103,6 +104,8 @@ async function load() {
   if (s.error || l.error) return $('msg').textContent = (s.error || l.error).message;
   students = s.data; logs = l.data; notes = n.error ? [] : n.data;
   rests = rd.error ? [] : (rd.data || []);
+  try { const sv = await sb.from('schedule_versions').select('*').order('created_at', { ascending: false }).limit(3000);
+    schedVers = sv.error ? [] : sv.data || []; schedErr = sv.error ? 'Falta ejecutar migracion_v14.sql en Supabase: hasta entonces no hay horarios ni revisiones.' : ''; } catch { schedVers = []; }
   await loadAvatars();
   $('msg').textContent = n.error || rd.error ? 'Algunas funciones no están disponibles (¿ya ejecutó migracion_v2.sql en Supabase?).'
     : v4 && sd.error ? 'No se pudo cargar el personal (¿ya ejecutó migracion_v4.sql en Supabase?).' : '';
@@ -110,6 +113,66 @@ async function load() {
   if (!hashDone) { hashDone = true; const id = hashId(); if (id) openStudent(id, { push: false }); else if (location.hash === '#mosaico' && me?.role === 'admin') setView('mos'); }
 }
 let hashDone = false;
+
+// ---- Revisiones: horarios por confirmar y horas declaradas por revisar (migracion_v14.sql) ----
+async function decideSched(v, ok) {
+  let note = null;
+  if (!ok) { const r = await ask({ title: 'Rechazar horario', hint: 'El estudiante verá este motivo y podrá corregir su horario.', label: 'Motivo', ok: 'Rechazar' }); if (!r) return; note = r.note; }
+  const { error } = await sb.rpc('staff_decide_schedule', { p_id: v.id, p_ok: ok, p_note: note });
+  if (error) alert(errText(error));
+  await load();
+}
+async function decideAdj(x, side, ok, newAt) {
+  let note = null;
+  if (!ok || newAt) { const r = await ask({ title: ok ? 'Aprobar con otra hora' : 'Rechazar hora declarada', hint: ok ? 'Explique por qué corrige la hora.' : 'La jornada no sumará horas hasta que el estudiante o el administrador lo resuelvan. El estudiante verá este motivo.', label: 'Motivo', ok: ok ? 'Aprobar' : 'Rechazar' }); if (!r) return; note = r.note; }
+  const { error } = await sb.rpc('staff_decide_adjust', { p_log: x.id, p_side: side, p_ok: ok, p_note: note, p_new_at: newAt || null });
+  if (error) { alert(errText(error)); return false; }
+  return true;
+}
+function askTime(x, side) {   // otra hora (mismo día de la jornada)
+  return new Promise(res => {
+    const inp = h('input', { type: 'time', value: fT(x[side + '_adj_at']).slice(0, 5) }), err = h('div', { className: 'err' }); let dlg;
+    const done = v => { dlg.remove(); unlock(); res(v); };
+    const form = h('form', { className: 'dlgbox', onsubmit: e => { e.preventDefault(); if (!inp.value) { err.textContent = 'Indique la hora.'; return; }
+        const iso = `${x.practice_date}T${inp.value}:00-06:00`; if (new Date(iso) > new Date()) { err.textContent = 'La hora no puede ser futura.'; return; } done(iso); } },
+      h('h3', { textContent: 'Hora que aprueba' }), h('p', { className: 'sub', textContent: `Jornada del ${fD(x.practice_date)}, ${side === 'entry' ? 'entrada' : 'salida'}.` }), h('label', {}, 'Hora', inp), err,
+      h('div', { className: 'dlgacts' }, h('button', { type: 'button', className: 'sec', textContent: 'Cancelar', onclick: () => done(null) }), h('button', { type: 'submit', textContent: 'Continuar' })));
+    dlg = h('div', { className: 'dlg', role: 'dialog', ariaModal: 'true' }, form); ovRoot().append(dlg); document.body.classList.add('noscroll'); inp.focus(); });
+}
+function renderRev() {
+  const body = $('rev-body'), pv = schedVers.filter(v => v.status === 'pending'), byId = Object.fromEntries(students.map(z => [z.id, z]));
+  const items = []; logs.forEach(x => ['entry', 'exit'].forEach(side => { if (x[side + '_adj_status'] === 'pending') items.push({ x, side }); }));
+  items.sort((a, b) => b.x.practice_date.localeCompare(a.x.practice_date));
+  const n = pv.length + items.length;
+  $('rev-sum').textContent = 'Revisiones' + (n ? ` (${n})` : '');
+  const ban = $('revban'); ban.classList.toggle('hidden', !n);
+  ban.replaceChildren(h('span', { textContent: `Hay ${n} ${n === 1 ? 'revisión pendiente' : 'revisiones pendientes'}: ${pv.length} de horario y ${items.length} de horas.` }), h('button', { type: 'button', className: 'sec small', textContent: 'Revisar', onclick: () => setView('rev') }));
+  body.replaceChildren(schedErr ? h('p', { className: 'empty', textContent: schedErr }) : '');
+  const nm = id => byId[id]?.full_name || 'Estudiante';
+  body.append(h('h3', { textContent: `Horarios por confirmar (${pv.length})` }));
+  if (!pv.length) body.append(h('p', { className: 'empty', textContent: 'No hay horarios pendientes.' }));
+  pv.forEach(v => { const conf = schedVers.filter(z => z.student_id === v.student_id && z.status === 'confirmed')[0];
+    body.append(h('div', { className: 'revc' }, h('b', { textContent: nm(v.student_id) }), h('span', { className: 'lj-meta', textContent: conf ? 'Cambio de horario' : 'Primer horario' }),
+      ...[['1', 'Lunes'], ['2', 'Martes'], ['3', 'Miércoles'], ['4', 'Jueves'], ['5', 'Viernes'], ['6', 'Sábado'], ['0', 'Domingo']].filter(([k]) => v.days[k]).map(([k, d]) => h('p', { className: 'rg', textContent: `${d}: ${a12(v.days[k].s)} a ${a12(v.days[k].e)}, almuerzo ${v.days[k].l} min` })),
+      h('div', { className: 'revact' }, h('button', { type: 'button', textContent: 'Confirmar', onclick: () => decideSched(v, true) }), h('button', { type: 'button', className: 'sec', textContent: 'Rechazar', onclick: () => decideSched(v, false) })))); });
+  body.append(h('h3', { textContent: `Horas por revisar (${items.length})` }));
+  if (!items.length) body.append(h('p', { className: 'empty', textContent: 'No hay horas pendientes.' }));
+  else body.append(h('div', { className: 'revact' }, h('button', { type: 'button', className: 'sec', textContent: `Aprobar las ${items.length} horas tal como las declararon`, onclick: async () => {
+    if (!confirm(`¿Aprobar las ${items.length} horas declaradas tal como están?`)) return;
+    for (const it of items) { const { error } = await sb.rpc('staff_decide_adjust', { p_log: it.x.id, p_side: it.side, p_ok: true, p_note: null, p_new_at: null }); if (error) { alert(errText(error)); break; } }
+    await load(); } })));
+  items.forEach(({ x, side }) => { const k = side === 'entry' ? 'Entrada' : 'Salida', sched = side === 'entry' ? x.sched_start : x.sched_end;
+    const diff = sched ? Math.round((new Date(x[side + '_adj_at']) - new Date(`${x.practice_date}T${sched}:00-06:00`)) / 60000) : null;
+    body.append(h('div', { className: 'revc' },
+      h('b', { textContent: nm(x.student_id) }), h('span', { className: 'lj-meta', textContent: `${fD(x.practice_date)} · ${k}` }),
+      h('p', { className: 'rg', textContent: `Horario: ${sched ? a12(sched) : '—'} · Registrado en la app: ${fT(x[side + '_at']).slice(0, 5)} · Declarada: ${fT(x[side + '_adj_at']).slice(0, 5)}` + (diff !== null ? ` (${diff >= 0 ? '+' : '−'}${Math.abs(diff)} min del horario)` : '') }),
+      x[side + '_reason'] ? h('p', { className: 'rg', textContent: 'Motivo: ' + x[side + '_reason'] }) : '',
+      h('div', { className: 'revact' },
+        h('button', { type: 'button', textContent: 'Aprobar', onclick: async () => { if (await decideAdj(x, side, true, null)) await load(); } }),
+        h('button', { type: 'button', className: 'sec', textContent: 'Aprobar con otra hora', onclick: async () => { const t = await askTime(x, side); if (t && await decideAdj(x, side, true, t)) await load(); } }),
+        h('button', { type: 'button', className: 'sec', textContent: 'Rechazar', onclick: async () => { if (await decideAdj(x, side, false, null)) await load(); } }),
+        h('button', { type: 'button', className: 'sec', textContent: 'Ver estudiante', onclick: () => openStudent(x.student_id) })))); });
+}
 
 // ---- Avatares: enlaces firmados en un solo lote; se reutilizan mientras no estén por vencer ----
 async function loadAvatars() {
@@ -281,7 +344,7 @@ function render() {
 
   renderPending(today, byId);
   renderRest(today);
-  renderStaff(); renderNewStu(); renderAccts(); renderVids();
+  renderRev(); renderStaff(); renderNewStu(); renderAccts(); renderVids();
 
   const days = [...Array(14)].map((_, i) => shiftDay(today, i - 13));
   const cnt = days.map(d => logs.filter(x => x.practice_date === d).length), mx = Math.max(1, ...cnt);
@@ -452,6 +515,8 @@ const val2 = v => v === null || v === undefined ? '—' : v === true ? 'sí' : v
 function describe(a) {
   const stu = students.find(s => s.id === a.student_id), tgt = staffMap[a.target_user], d = a.detail || {};
   const ch = Object.entries(d).filter(([, v]) => v && typeof v === 'object' && 'a' in v).map(([k, v]) => `${FIELD[k] || k}: ${val2(v.de)} → ${val2(v.a)}`).join('; ');
+  if (a.action === 'horario_confirmado' || a.action === 'horario_rechazado') return `${a.action === 'horario_confirmado' ? 'Confirmó' : 'Rechazó'} el horario semanal de ${stu?.full_name || 'un estudiante'}${d.nota ? ' · ' + d.nota : ''}`;
+  if (a.action === 'hora_aprobada' || a.action === 'hora_rechazada') return `${a.action === 'hora_aprobada' ? 'Aprobó' : 'Rechazó'} la hora de ${d.lado === 'entry' ? 'entrada' : 'salida'} del ${d.fecha ? fD(d.fecha) : '—'} de ${stu?.full_name || 'un estudiante'}${d.hora_final && d.hora_final !== d.hora_declarada ? ` (la dejó en ${fT(d.hora_final).slice(0, 5)})` : ''}${d.nota ? ' · ' + d.nota : ''}`;
   if (a.action === 'personal_creado') return `Creó la cuenta de supervisor ${d.nombre} (${d.correo})`;
   if (a.action === 'estudiantes_creados') return `Creó ${d.creados} ${d.creados === 1 ? 'cuenta' : 'cuentas'} de estudiantes${d.omitidos ? ` (${d.omitidos} ya existían)` : ''}`;
   if (a.action === 'videos_archivados') return `Archivó ${d.cantidad} ${d.cantidad === 1 ? 'video' : 'videos'} (${fSize(d.bytes)}) para eliminarlos de Supabase`;
@@ -887,9 +952,9 @@ const ledEl = st => st.text ? h('div', { className: 'led ' + st.cls, textContent
 function hrsEl(M) {
   const isT = viewDay() === todayGT();
   return (M.dm !== null || M.hs.over) ? h('div', { className: 'hrs' },
-    M.dm !== null ? h('span', { className: 'hc ' + (M.dm >= Horas.JORNADA_MIN ? 'ok' : 'low'), title: M.dm >= Horas.JORNADA_MIN ? 'Jornada completa' : 'Jornada menor a 8 horas',
+    M.dm !== null ? h('span', { className: 'hc ' + (M.dm >= Horas.jornada(viewDay()) ? 'ok' : 'low'), title: M.dm >= Horas.jornada(viewDay()) ? 'Jornada completa' : 'Jornada menor a las horas del día',
       textContent: Horas.fHM(M.dm) + (isT ? ' hoy' : ' ese día') }) : '',
-    M.hs.over ? h('span', { className: 'hc xtra', title: 'Horas extra acumuladas: lo trabajado después de las 8 horas de cada día', textContent: '+' + Horas.fHM(M.hs.over) + ' extra' }) : '') : '';
+    M.hs.over ? h('span', { className: 'hc xtra', title: 'Horas extra acumuladas: lo trabajado después de las 8 horas de cada día (4 los sábados)', textContent: '+' + Horas.fHM(M.hs.over) + ' extra' }) : '') : '';
 }
 const badgesEl = s => h('span', { className: 'badges' }, h('span', { className: 'pg ' + (s.program || 'none'), textContent: progName(s.program) }), s.active ? '' : h('span', { className: 'pg off', textContent: 'Inactivo' }));
 const cntEl = M => h('div', { className: 'cnt' }, h('b', { textContent: M.n }), h('small', { textContent: M.n === 1 ? 'bitácora' : 'bitácoras' }),
@@ -918,7 +983,7 @@ function studentTable(list, M) {
       h('td', { textContent: `${s.grade} ${s.section}` }),
       h('td', {}, h('span', { className: 'pg ' + (s.program || 'none'), textContent: progName(s.program) })),
       h('td', {}, m.st.text ? h('span', { className: 'led ' + m.st.cls, textContent: m.st.text }) : '—'),
-      h('td', { className: 'num' }, m.dm !== null ? h('span', { className: 'hc ' + (m.dm >= Horas.JORNADA_MIN ? 'ok' : 'low'), textContent: Horas.fHM(m.dm) }) : '—'),
+      h('td', { className: 'num' }, m.dm !== null ? h('span', { className: 'hc ' + (m.dm >= Horas.jornada(viewDay()) ? 'ok' : 'low'), textContent: Horas.fHM(m.dm) }) : '—'),
       h('td', { className: 'num', textContent: hm(m.hs.total) }),
       h('td', { className: 'num' }, m.hs.over ? h('span', { className: 'hc xtra', textContent: '+' + Horas.fHM(m.hs.over) }) : '—'),
       h('td', { className: 'num', textContent: m.n }),
@@ -1005,7 +1070,19 @@ function tabResumen(s, M) {
       !s.program ? h('button', { type: 'button', className: 'sec', textContent: 'Asignar Prepráctica', onclick: () => setProgramFirst(s, 'prepractica') }) : ''));
   return h('div', { className: 'inner' },
     M.rei ? h('div', { className: 'banner', textContent: `Reincidente: ${M.m.length} jornadas sin cerrar a tiempo en los últimos ${REINC_DIAS} días. Considere registrar una amonestación.` }) : '',
-    h('div', { className: 'rsum' }, left, lastJornada(s, M)));
+    h('div', { className: 'rsum' }, left, lastJornada(s, M)), schedBlock(s));
+}
+// Horario semanal del estudiante (confirmado y, si existe, el pendiente)
+function schedBlock(s) {
+  const mine = schedVers.filter(v => v.student_id === s.id), conf = mine.filter(v => v.status === 'confirmed').sort((a, b) => (b.decided_at || '').localeCompare(a.decided_at || ''))[0], pend = mine.find(v => v.status === 'pending');
+  const tbl = days => h('dl', { className: 'sched' }, ...[['1', 'Lunes'], ['2', 'Martes'], ['3', 'Miércoles'], ['4', 'Jueves'], ['5', 'Viernes'], ['6', 'Sábado'], ['0', 'Domingo']].flatMap(([k, n]) => {
+    const d = days?.[k]; return d ? [h('dt', { textContent: n }), h('dd', { textContent: `${a12(d.s)} a ${a12(d.e)}, almuerzo ${d.l} min` })] : []; }));
+  const box = h('section', { className: 'lastj schedj' }, h('h3', { textContent: 'Horario semanal' }));
+  if (!conf && !pend) return box.append(h('p', { className: 'empty', textContent: schedErr || 'El estudiante todavía no ha registrado su horario. Mientras tanto se aplican las reglas anteriores (sin margen ni preguntas).' })), box;
+  if (conf) box.append(h('p', { className: 'lj-meta', textContent: `Confirmado el ${fDT(conf.decided_at)}${conf.decided_by ? ' por ' + by(conf.decided_by) : ''}` }), tbl(conf.days));
+  if (pend) box.append(h('p', { className: 'banner', textContent: 'Hay un horario nuevo pendiente de confirmación.' }), tbl(pend.days),
+    h('div', { className: 'revact' }, h('button', { type: 'button', textContent: 'Confirmar', onclick: () => decideSched(pend, true) }), h('button', { type: 'button', className: 'sec', textContent: 'Rechazar', onclick: () => decideSched(pend, false) })));
+  return box;
 }
 // Enlaces firmados de fotos y videos, reutilizados mientras siguen vigentes (50 de 60 min)
 const mUrl = {};
@@ -1027,7 +1104,7 @@ function lastJornada(s, M) {
   const st = stale ? ['late', `Sin cerrar desde hace ${dias(dayDiff(x.practice_date, today))}`] : x.status === 'in_progress' ? ['on', `En jornada desde ${fT(x.entry_at).slice(0, 5)}`]
     : x.status === 'unclosed' ? ['late', 'Jornada no concluida'] : ['done', 'Completada'];
   card.append(h('div', { className: 'lj-head' }, h('b', { textContent: fD(x.practice_date) }), h('div', { className: 'led ' + st[0], textContent: st[1] })),
-    h('p', { className: 'lj-meta', textContent: `Entrada ${fT(x.entry_at).slice(0, 5)}` + (x.exit_at ? ` · Salida ${fT(x.exit_at).slice(0, 5)}` : '') + (min !== null ? ` · ${Horas.fHM(min)} netas` : '') }));
+    h('p', { className: 'lj-meta', textContent: `Entrada ${fT(Horas.times(x)?.entry || x.entry_at).slice(0, 5)}` + (x.exit_at ? ` · Salida ${fT(Horas.times(x)?.exit || x.exit_at).slice(0, 5)}` : '') + (min !== null ? ` · ${Horas.fHM(min)} netas` : '') }));
   if (x.main_activity) card.append(h('p', { className: 'lj-act', textContent: x.main_activity }));
   const fig = (label, node) => h('figure', { className: 'lj-fig' }, node, h('figcaption', { textContent: label }));
   const none = t => h('p', { className: 'lj-none', textContent: t });
@@ -1075,7 +1152,7 @@ function tabInforme(s) {
 }
 
 // ---- Menú de secciones (hamburguesa) ----
-const VSEC = { est: 'v-est', rest: 'rest', staff: 'staff', newstu: 'newstu', accts: 'accts', vids: 'vids', mos: 'mos' };
+const VSEC = { est: 'v-est', rev: 'rev', rest: 'rest', staff: 'staff', newstu: 'newstu', accts: 'accts', vids: 'vids', mos: 'mos' };
 let curView = 'est';
 const viewLabel = v => v === 'mos' ? 'Mosaico de videos' : v === 'est' ? 'Estudiantes' : ($(VSEC[v] + '-sum') || $(VSEC[v]).querySelector('h2'))?.textContent || v;
 function setView(v) {
@@ -1133,6 +1210,19 @@ async function openMedia(x, btn, kind) {
   vm.addEventListener('fullscreenchange', () => { if (!document.fullscreenElement && vm) close(); });
 }
 const lp0 = (x, s) => x.program || s?.program || '';
+const a12 = t => { const [a, b] = t.split(':').map(Number); return `${a % 12 || 12}:${String(b).padStart(2, '0')} ${a < 12 ? 'a. m.' : 'p. m.'}`; };
+const AADJ = { pending: 'en revisión', approved: 'aprobada', auto: 'aprobada automáticamente (dentro del margen)', rejected: 'rechazada' };
+const AKIND = { extra_antes: 'Entrada anticipada: tiempo extra', anticipado: 'Anticipada', tardio: 'Registro tardío', declarada: 'Hora declarada', extra_despues: 'Salida con tiempo extra', cierre_tardio: 'Hora de salida declarada' };
+function adjRows(x) {
+  const out = [];
+  [['entry', 'Entrada'], ['exit', 'Salida']].forEach(([k, n]) => { const kind = x[k + '_kind']; if (!kind) return;
+    const st = x[k + '_adj_status'], adj = x[k + '_adj_at'], bad = st === 'pending' || st === 'rejected' ? 'bad' : '';
+    let t = kind === 'anticipado' ? (k === 'entry' ? `Llegó antes y no es tiempo extra: se cuenta desde ${a12(x.sched_start)}` : 'Salió antes de su horario') : AKIND[kind] || kind;
+    if (adj && kind !== 'anticipado') t += `: ${fT(adj).slice(0, 5)} (real del registro ${fT(x[k + '_at']).slice(0, 5)}) · ${AADJ[st] || ''}`;
+    out.push([n, t, bad]); if (x[k + '_reason']) out.push(['Motivo', x[k + '_reason'], bad]);
+    if (x[k + '_note']) out.push(['Respuesta del equipo', x[k + '_note'] + (x[k + '_decided_by'] ? ' · ' + by(x[k + '_decided_by']) : ''), '']); });
+  return out;
+}
 function logBody(x, s) {
   const today = todayGT(), stale = isStale(x, today), un = x.status === 'unclosed', late = x.closed_late === true;
   const body = h('dl', { className: 'body' });
@@ -1141,6 +1231,8 @@ function logBody(x, s) {
   if (un) { row('Estado', 'Cerrada por el administrador como no concluida', 'bad'); row('Motivo del cierre', x.admin_note, 'bad'); row('Cerrada el', fDT(x.resolved_at) + (v4 && x.resolved_by ? ` · por ${by(x.resolved_by)}` : '')); }
   if (late) { row('Cierre tardío', `Enviada el ${fDT(x.exit_at)}, ${dias(dayDiff(x.practice_date, dateGT(x.exit_at)))} después de la jornada. La hora de salida no corresponde al fin real de la práctica.`, 'bad');
     row('Motivo del retraso', x.late_reason); }
+  if (x.sched_start) row('Horario de ese día', `${a12(x.sched_start)} a ${a12(x.sched_end)}, almuerzo ${x.sched_lunch ?? 0} min`);
+  adjRows(x).forEach(r => row(r[0], r[1], r[2]));
   row('Actividades', x.activities); row('Actividad principal', x.main_activity); row('Aprendizaje', x.learning);
   row('Herramientas', x.tools_used);
   row('Supervisión', x.supervised == null ? '' : x.supervised ? 'Trabajó bajo supervisión del encargado' : 'Sin supervisión del encargado');

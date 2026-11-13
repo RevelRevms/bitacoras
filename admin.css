@@ -410,3 +410,12 @@ dialog.sdlg .vmodal,dialog.sdlg .dlg{position:fixed}
   .rsum .rleft .facts{grid-template-columns:repeat(2,1fr)}
   .rsum .rleft .facts>div:nth-child(2){grid-column:auto}
 }
+
+/* revisiones y horario semanal (v14) */
+#revban{display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap;margin:0 0 12px;padding:10px 14px;background:var(--hl-soft,#fff4cc);border-left:4px solid #c28a00;border-radius:2px}
+#revban button{width:auto;min-height:40px;margin:0}
+.revc{border:1px solid var(--rule2);border-radius:4px;padding:12px 14px;margin:10px 0;background:#fff;display:flex;flex-direction:column;gap:4px}
+.revc .rg{margin:0;font-size:.92rem}
+.revact{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}.revact button{width:auto;min-height:40px;margin:0}
+.schedj{margin-top:14px}
+dl.sched{display:grid;grid-template-columns:auto 1fr;gap:2px 14px;margin:6px 0;font-size:.92rem}dl.sched dt{font-weight:700}dl.sched dd{margin:0}

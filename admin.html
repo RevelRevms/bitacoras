@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Panel administrativo - Bitácora</title><link rel="stylesheet" href="admin.css?v=33"></head><body><header class="top"><div class="brand"><button type="button" id="mb" class="mb hidden" aria-label="Abrir menú" aria-expanded="false" aria-controls="drawer"><span></span><span></span><span></span></button><h1>Bitácora<span>panel de supervisión</span></h1><div id="vname" class="vname"></div></div><div id="me" class="sub"></div><div id="hact" class="hact hidden"><button type="button" id="out-top" class="gomos salir">Salir</button></div></header>
+<title>Panel administrativo - Bitácora</title><link rel="stylesheet" href="admin.css?v=34"></head><body><header class="top"><div class="brand"><button type="button" id="mb" class="mb hidden" aria-label="Abrir menú" aria-expanded="false" aria-controls="drawer"><span></span><span></span><span></span></button><h1>Bitácora<span>panel de supervisión</span></h1><div id="vname" class="vname"></div></div><div id="me" class="sub"></div><div id="hact" class="hact hidden"><button type="button" id="out-top" class="gomos salir">Salir</button></div></header>
 <div id="scrim" class="scrim hidden"></div>
 <nav id="drawer" class="drawer" aria-label="Secciones del panel" hidden><div class="dhead"><b>Menú</b><button type="button" id="dclose" class="sec" aria-label="Cerrar menú">✕</button></div><div id="dme" class="dme"></div><div id="dmenu" class="dmenu"></div><div class="dfoot"><button id="re" class="sec" type="button">Actualizar datos</button><button id="out" class="sec" type="button">Salir</button></div></nav>
 <main>
@@ -11,6 +11,7 @@
 <button>Entrar</button></form>
 <div id="app" class="hidden">
 <section id="v-est" class="vsec on">
+<div id="revban" class="notice hidden"></div>
 <div id="daybar" class="daybar"></div><div class="kpis" id="kpis"></div>
 <div id="restbar" class="restbar hidden"></div>
 <div id="pend" class="card pend hidden"></div>
@@ -18,6 +19,7 @@
 <div class="bar"><input id="q" type="search" placeholder="Buscar estudiante o empresa…" aria-label="Buscar"><select id="g" aria-label="Grado"><option value="">Todos los grados</option></select><select id="pg" title="Tipo de práctica" aria-label="Tipo de práctica"><option value="">Todos los tipos</option><option value="practica">Práctica Supervisada</option><option value="prepractica">Prepráctica</option><option value="none">Sin definir</option></select><select id="ac" title="Estado" aria-label="Estado"><option value="">Activos e inactivos</option><option value="on">Solo activos</option><option value="off">Solo inactivos</option></select><select id="srt" title="Ordenar por" aria-label="Ordenar por"></select><div class="seg" role="group" aria-label="Vista"><button type="button" id="vc" aria-pressed="true">Tarjetas</button><button type="button" id="vt" aria-pressed="false">Tabla</button></div></div>
 <div id="list" class="cards"></div>
 </section>
+<section id="rev" class="vsec card"><h2 id="rev-sum">Revisiones</h2><p class="sub">Horarios semanales por confirmar y horas que los estudiantes declararon fuera de su margen de 20 minutos.</p><div id="rev-body"></div></section>
 <section id="rest" class="vsec card"><h2 id="rest-sum">Días de descanso</h2>
 <p class="sub">Marque los días laborables en que no hay práctica. Ese día el estudiante no puede iniciar jornada y verá el aviso en su pantalla.</p>
 <div id="rest-form"></div><div id="rest-list"></div></section>
@@ -41,4 +43,4 @@
 </div></main>
 <dialog id="sdlg" class="sdlg" aria-labelledby="sname"><div id="shead" class="shead"></div><div id="stabs" class="stabs" role="tablist"></div><div id="spanel" class="spanel"></div></dialog>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="ojo.js?v=3"></script><script src="supabase-config.js?v=8"></script><script src="horas.js?v=2"></script><script src="admin.js?v=39"></script></body></html>
+<script src="ojo.js?v=3"></script><script src="supabase-config.js?v=8"></script><script src="horas.js?v=3"></script><script src="admin.js?v=40"></script></body></html>
