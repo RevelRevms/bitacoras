@@ -7,7 +7,7 @@ const unlock = () => { if (!sdlg.open && !document.querySelector('.vmodal,.dlg')
 const REINC_N = 3, REINC_DIAS = 30;
 const PROG = { practica: 'Práctica Supervisada', prepractica: 'Prepráctica' };
 const progName = p => PROG[p] || 'Sin definir';
-let schedVers = [], schedErr = '';
+let schedVers = [], schedErr = '', showHours = true, hoursSwErr = false;
 let students = [], logs = [], notes = [], rests = [], kf = 'active', avs = {};   // el panel abre con «Estudiantes activos» ya pulsado
 let arch = [], archMap = {}, parch = [], pArchMap = {}, pinfo = [], archErr = '', pErr = '', vdBuilt = false, vdUi = {}, vd = { verified: [], failed: [], busy: false, ctrl: null, note: '', skipped: 0 }, vdTo = '';
 let me = null, staffMap = {}, audit = [], accts = [], acErr = '', v4 = true, staffBuilt = false, staffUi = {}, lastCreated = null;   // v4 = ¿ya se ejecutó migracion_v4.sql?   // kf = filtro activo de los indicadores superiores
@@ -106,6 +106,7 @@ async function load() {
   rests = rd.error ? [] : (rd.data || []);
   try { const sv = await sb.from('schedule_versions').select('*').order('created_at', { ascending: false }).limit(3000);
     schedVers = sv.error ? [] : sv.data || []; schedErr = sv.error ? 'Falta ejecutar migracion_v14.sql en Supabase: hasta entonces no hay horarios ni revisiones.' : ''; } catch { schedVers = []; }
+  try { const ap = await sb.from('app_settings').select('show_hours').eq('id', 1).maybeSingle(); hoursSwErr = !!ap.error; showHours = ap.error ? true : ap.data?.show_hours !== false; } catch { hoursSwErr = true; }
   await loadAvatars();
   $('msg').textContent = n.error || rd.error ? 'Algunas funciones no están disponibles (¿ya ejecutó migracion_v2.sql en Supabase?).'
     : v4 && sd.error ? 'No se pudo cargar el personal (¿ya ejecutó migracion_v4.sql en Supabase?).' : '';
@@ -160,6 +161,18 @@ async function renderAvisos() {
 
 
 // ---- Revisiones: horarios por confirmar y horas declaradas por revisar (migracion_v14.sql) ----
+// Interruptor: mostrar u ocultar a los estudiantes sus horas (solo administrador)
+function renderHrSw() {
+  const box = $('hrsw'); box.replaceChildren(); box.classList.toggle('hidden', me?.role !== 'admin'); if (me?.role !== 'admin') return;
+  const cb = h('input', { type: 'checkbox', role: 'switch', checked: showHours, disabled: hoursSwErr });
+  const out = h('span', { className: 'sub', role: 'status' });
+  cb.onchange = async () => { cb.disabled = true; const want = cb.checked;
+    const { error } = await sb.rpc('admin_set_show_hours', { p_on: want });
+    if (error) { cb.checked = !want; out.textContent = errText(error); } else { showHours = want; out.textContent = want ? 'Los estudiantes ven sus horas.' : 'Los estudiantes ya no ven sus horas.'; }
+    cb.disabled = false; };
+  box.append(h('label', { className: 'sw' }, cb, h('span', { className: 'trk', ariaHidden: 'true' }), h('span', { className: 'lab', textContent: 'Mostrar a los estudiantes su información de horas' })), out,
+    hoursSwErr ? h('p', { className: 'sub', textContent: 'Falta ejecutar migracion_v16.sql en Supabase.' }) : '');
+}
 async function decideSched(v, ok) {
   let note = null;
   if (!ok) { const r = await ask({ title: 'Rechazar horario', hint: 'El estudiante verá este motivo y podrá corregir su horario.', label: 'Motivo', ok: 'Rechazar' }); if (!r) return; note = r.note; }
@@ -389,7 +402,7 @@ function render() {
 
   renderPending(today, byId);
   renderRest(today);
-  renderRev(); renderAvisos(); renderStaff(); renderNewStu(); renderAccts(); renderVids();
+  renderHrSw(); renderRev(); renderAvisos(); renderStaff(); renderNewStu(); renderAccts(); renderVids();
 
   const days = [...Array(14)].map((_, i) => shiftDay(today, i - 13));
   const cnt = days.map(d => logs.filter(x => x.practice_date === d).length), mx = Math.max(1, ...cnt);
@@ -560,6 +573,7 @@ const val2 = v => v === null || v === undefined ? '—' : v === true ? 'sí' : v
 function describe(a) {
   const stu = students.find(s => s.id === a.student_id), tgt = staffMap[a.target_user], d = a.detail || {};
   const ch = Object.entries(d).filter(([, v]) => v && typeof v === 'object' && 'a' in v).map(([k, v]) => `${FIELD[k] || k}: ${val2(v.de)} → ${val2(v.a)}`).join('; ');
+  if (a.action === 'horas_visibles') return d.visible ? 'Mostró las horas a los estudiantes' : 'Ocultó las horas a los estudiantes';
   if (a.action === 'avisos_ajustes') return `Cambió los ajustes de avisos: ${d.activados ? 'activados' : 'desactivados'}, cada ${d.cada_min} min, de ${String(d.horas).replace('-', ' a ')} h`;
   if (a.action === 'horario_confirmado' || a.action === 'horario_rechazado') return `${a.action === 'horario_confirmado' ? 'Confirmó' : 'Rechazó'} el horario semanal de ${stu?.full_name || 'un estudiante'}${d.nota ? ' · ' + d.nota : ''}`;
   if (a.action === 'hora_aprobada' || a.action === 'hora_rechazada') return `${a.action === 'hora_aprobada' ? 'Aprobó' : 'Rechazó'} la hora de ${d.lado === 'entry' ? 'entrada' : 'salida'} del ${d.fecha ? fD(d.fecha) : '—'} de ${stu?.full_name || 'un estudiante'}${d.hora_final && d.hora_final !== d.hora_declarada ? ` (la dejó en ${fT(d.hora_final).slice(0, 5)})` : ''}${d.nota ? ' · ' + d.nota : ''}`;

@@ -4,6 +4,7 @@ const $ = id => document.getElementById(id);
 const TZ = 'America/Guatemala', MAX = 10 * 1024 * 1024;
 const SCREENS = ['s-login','s-profile','s-extra','s-sched','s-more','s-home','s-form','s-done','s-staff'];
 let pushInit = false;
+let showHours = true;   // lo decide el administrador (migracion_v16.sql); si la tabla no existe, se muestran
 let mySched = { conf: null, pend: null, rej: null, any: false }, schedSkip = false;
 let user, student, log, myLogs = [], myNotes = [], myRests = [], video = null, myArch = {}, myPArch = {}; // video = {blob, type, name} (solo para la vista previa local)
 
@@ -95,6 +96,7 @@ async function route() {
     myPArch = Object.fromEntries((pr.error ? [] : pr.data || []).filter(a => a.removed_at).map(a => [a.log_id, true])); } catch { myPArch = {}; }
   try { const sr = await sb.from('schedule_versions').select('*').eq('student_id', user.id).order('created_at', { ascending: false }).limit(30);
     mySched = schedState(sr.error ? [] : sr.data || []); } catch { mySched = schedState([]); }   // migracion_v14: si aún no existe, rige la regla anterior
+  try { const hr = await sb.from('app_settings').select('show_hours').eq('id', 1).maybeSingle(); showHours = hr.error ? true : hr.data?.show_hours !== false; } catch { showHours = true; }
   setWho(); setTitle(student.program);
   showAvatars();
   document.querySelectorAll('.go-more').forEach(b => b.textContent = mySched.any ? 'Mi horario y avisos' : 'Definir mi horario y avisos');
@@ -125,7 +127,7 @@ function showReceipt() {
     ['Entrada', fmtTime(log.entry_at)], ['Salida', fmtTime(log.exit_at)], ['Dirección de la empresa', log.practice_place],
     ['Actividad principal', log.main_activity],
     ['Evidencia', log.start_photo_path ? 'Foto de inicio y video cargados correctamente' : 'Video cargado correctamente']];
-  const hm = Horas.minutes(log); if (hm !== null) rows.splice(4, 0, ['Horas de hoy', Horas.fHM(hm) + (hm > Horas.jornada(log.practice_date) ? ` (+${Horas.fHM(hm - Horas.jornada(log.practice_date))} extra)` : '') + ', sin almuerzo']);
+  const hm = showHours ? Horas.minutes(log) : null; if (hm !== null) rows.splice(4, 0, ['Horas de hoy', Horas.fHM(hm) + (hm > Horas.jornada(log.practice_date) ? ` (+${Horas.fHM(hm - Horas.jornada(log.practice_date))} extra)` : '') + ', sin almuerzo']);
   if (log.closed_late) rows.splice(4, 0, ['Cierre', 'Tardío (jornada de un día anterior)']);
   kindRows(log).forEach(r => rows.push(r));
   const dl = $('receipt'); dl.replaceChildren();
@@ -268,12 +270,12 @@ function renderWarns() {
         (lg ? ` · sobre la jornada del ${fmtDate(lg.practice_date)}` : '') }),
       el('p', { textContent: n.note }))); });
 }
-const chips = x => { const m = Horas.minutes(x); if (m === null) { const rv = Horas.review(x); return rv ? el('span', { className: 'hrs' }, el('i', { className: 'hc ' + (rv === 'pending' ? 'rev' : 'rej'), textContent: rv === 'pending' ? 'Hora en revisión' : 'Hora rechazada' })) : ''; }
+const chips = x => { const m = showHours ? Horas.minutes(x) : null; if (m === null) { const rv = Horas.review(x); return rv ? el('span', { className: 'hrs' }, el('i', { className: 'hc ' + (rv === 'pending' ? 'rev' : 'rej'), textContent: rv === 'pending' ? 'Hora en revisión' : 'Hora rechazada' })) : ''; }
   return el('span', { className: 'hrs' }, el('i', { className: 'hc ' + (m >= Horas.jornada(x.practice_date) ? 'ok' : 'low'), textContent: Horas.fHM(m) }),
     m > Horas.jornada(x.practice_date) ? el('i', { className: 'hc xtra', textContent: '+' + Horas.fHM(m - Horas.jornada(x.practice_date)) + ' extra' }) : ''); };
 function renderHours() {
   const box = $('hrs-card'); box.replaceChildren(); const hs = Horas.summarize(myLogs);
-  if (!myLogs.length) return;
+  if (!myLogs.length || !showHours) return;
   const f = (v, k, c) => el('div', { className: 'hf ' + c }, el('b', { textContent: v }), el('span', { textContent: k }));
   box.append(el('h3', { textContent: 'Mis horas' }),
     el('div', { className: 'hfs' }, f(Horas.fHM(hs.total), 'horas acumuladas', 'hfg'), f(hs.over ? '+' + Horas.fHM(hs.over) : '0 h', 'horas extra acumuladas', 'hfb'), f(String(hs.days), 'jornadas contadas', '')),
