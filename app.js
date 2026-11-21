@@ -796,13 +796,13 @@ function renderFinalCard(box) {
   if (r) {
     box.append(el('p', { className: 'info', textContent: `${FIN_ST[r.status]}${r.status === 'approved' && r.decided_at ? ' el ' + fmtDate(r.decided_at.slice(0, 10)) : ''}.` + (r.status === 'rejected' && r.decision_note ? ' Motivo: ' + r.decision_note : '') }),
       el('button', { type: 'button', className: 'sec small', textContent: r.status === 'rejected' ? 'Corregir y reenviar' : 'Ver mi informe', onclick: openFinal }));
-  } else if (s.eligible) {
-    box.append(el('p', { className: 'info', textContent: `Ya completó las horas de su ${prog}. Puede presentar su informe final.` }),
+  } else {
+    const pct = s.eligible ? 100 : Math.max(0, Math.min(100, Math.floor(s.done_min * 100 / s.required_min)));   // solo se dibuja: no se muestran horas ni porcentaje
+    box.append(el('div', { className: 'goal', role: 'progressbar', 'aria-label': 'Avance hacia el informe final', 'aria-valuemin': '0', 'aria-valuemax': '100', 'aria-valuenow': String(pct) }, el('i', { style: `width:${pct}%` })));
+    if (s.eligible) box.append(el('p', { className: 'info', textContent: `¡Meta cumplida! Ya completó su ${prog}. Puede presentar su informe final.` }),
       el('button', { type: 'button', textContent: 'Presentar informe final', onclick: openFinal }));
-  } else if (showHours) {
-    const pct = Math.min(100, Math.round(s.done_min * 100 / s.required_min));
-    box.append(el('p', { className: 'info', textContent: `Lo podrá presentar al completar ${Horas.fHM(s.required_min)} de su ${prog}. Lleva ${Horas.fHM(s.done_min)} (${pct} %).` }));
-  } else box.append(el('p', { className: 'info', textContent: `Lo podrá presentar al completar las horas de su ${prog}.` }));
+    else box.append(el('p', { className: 'info', textContent: `Su meta: completar su ${prog} para presentar el informe final.` }));
+  }
 }
 async function openFinalFile(path) {
   const { data, error } = await sb.storage.from('final-reports').createSignedUrl(path, 300);
