@@ -4,7 +4,7 @@
 <link rel="manifest" href="manifest.webmanifest"><meta name="theme-color" content="#14213d"><link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="Bitácora"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>Bitácora de práctica supervisada</title>
-<link rel="stylesheet" href="styles.css?v=21"></head><body><header class="top"><h1>Bitácora<span id="ttl-sub">de práctica supervisada</span></h1></header><main class="sheet">
+<link rel="stylesheet" href="styles.css?v=22"></head><body><header class="top"><h1>Bitácora<span id="ttl-sub">de práctica supervisada</span></h1></header><main class="sheet">
 <div id="msg" class="err" role="alert"></div>
 
 <section id="s-login" class="card hidden"><h2 class="cover">Registre su jornada de hoy</h2><p class="info">Entre con el correo y la contraseña que le dio su administrador.</p><form id="f-login">
@@ -53,10 +53,24 @@
 <p id="sc-note" class="info"></p>
 <button id="sc-send">Enviar horario</button><button type="button" id="sc-skip" class="sec">Ahora no</button></form></section>
 
-<section id="s-more" class="card hidden"><h2 class="cover">Mi horario y avisos</h2><div id="sched-card2" class="notice hidden"></div><div id="push-card2" class="notice hidden"></div><button type="button" id="more-back" class="sec">Volver</button></section>
+<section id="s-final" class="card hidden"><h2 class="cover">Informe final</h2>
+<p id="fin-sub" class="info"></p><div id="fin-note" class="notice hidden"></div>
+<form id="f-final">
+<label for="fi-sum">Resumen general de su práctica</label><textarea id="fi-sum" maxlength="3000" placeholder="Mínimo 50 caracteres"></textarea>
+<label for="fi-act">Actividades que realizó</label><textarea id="fi-act" maxlength="3000" placeholder="Mínimo 50 caracteres"></textarea>
+<label for="fi-lea">Qué aprendió</label><textarea id="fi-lea" maxlength="3000" placeholder="Mínimo 50 caracteres"></textarea>
+<label for="fi-ach">Logros (opcional)</label><textarea id="fi-ach" maxlength="2000"></textarea>
+<label for="fi-dif">Dificultades (opcional)</label><textarea id="fi-dif" maxlength="2000"></textarea>
+<label for="fi-rec">Recomendaciones (opcional)</label><textarea id="fi-rec" maxlength="2000"></textarea>
+<label for="fi-file">Archivo del informe: PDF, Word o Excel, hasta 10 MB</label><input id="fi-file" type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet">
+<p id="fi-cur" class="info"></p>
+<button id="fi-send">Enviar informe final</button><button type="button" id="fi-back" class="sec">Volver</button></form>
+<div id="fin-view" class="hidden"></div></section>
+
+<section id="s-more" class="card hidden"><h2 class="cover">Mi horario y avisos</h2><div id="final-card2" class="notice hidden"></div><div id="sched-card2" class="notice hidden"></div><div id="push-card2" class="notice hidden"></div><button type="button" id="more-back" class="sec">Volver</button></section>
 <section id="s-home" class="card hidden"><div class="me"><div id="me-av" class="av"></div><div id="who" class="info"></div></div>
 <button type="button" id="b-avchg" class="sec small chg-av">Cambiar mi foto de perfil</button><input id="av-chg" type="file" accept="image/*" class="hidden">
-<div id="sched-card" class="notice hidden"></div><div id="push-card" class="notice hidden"></div><p id="today" class="today"></p><p id="rest-today" class="notice restnow hidden"></p>
+<div id="sched-card" class="notice hidden"></div><div id="push-card" class="notice hidden"></div><div id="final-card" class="notice hidden"></div><p id="today" class="today"></p><p id="rest-today" class="notice restnow hidden"></p>
 <p id="inactive-note" class="notice bad hidden"><b>Su cuenta está inactiva.</b> No puede iniciar nuevas jornadas. Puede consultar su historial. Si cree que es un error, hable con su administrador.</p>
 <div id="start-box"><h2 class="eh">Foto de inicio de jornada</h2>
 <p class="notice"><b>Importante:</b> no fotografíe información, documentos, pantallas o áreas que la empresa o institución no permita mostrar, ni a ninguna persona sin su consentimiento previo.</p>
@@ -132,4 +146,4 @@
 <button type="button" id="pic-cancel" class="sec">Cancelar</button>
 </div></div></div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="ojo.js?v=3"></script><script src="supabase-config.js?v=8"></script><script src="horas.js?v=3"></script><script src="push.js?v=1"></script><script src="app.js?v=27"></script></body></html>
+<script src="ojo.js?v=3"></script><script src="supabase-config.js?v=8"></script><script src="horas.js?v=3"></script><script src="push.js?v=1"></script><script src="app.js?v=28"></script></body></html>

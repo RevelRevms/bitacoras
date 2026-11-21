@@ -7,6 +7,7 @@ const unlock = () => { if (!sdlg.open && !document.querySelector('.vmodal,.dlg')
 const REINC_N = 3, REINC_DIAS = 30;
 const PROG = { practica: 'Práctica Supervisada', prepractica: 'Prepráctica' };
 const progName = p => PROG[p] || 'Sin definir';
+let finals = [], finErr = '', finFilter = 'submitted';
 let schedVers = [], schedErr = '', showHours = true, hoursSwErr = false;
 let students = [], logs = [], notes = [], rests = [], kf = 'active', avs = {};   // el panel abre con «Estudiantes activos» ya pulsado
 let arch = [], archMap = {}, parch = [], pArchMap = {}, pinfo = [], archErr = '', pErr = '', vdBuilt = false, vdUi = {}, vd = { verified: [], failed: [], busy: false, ctrl: null, note: '', skipped: 0 }, vdTo = '';
@@ -107,6 +108,7 @@ async function load() {
   try { const sv = await sb.from('schedule_versions').select('*').order('created_at', { ascending: false }).limit(3000);
     schedVers = sv.error ? [] : sv.data || []; schedErr = sv.error ? 'Falta ejecutar migracion_v14.sql en Supabase: hasta entonces no hay horarios ni revisiones.' : ''; } catch { schedVers = []; }
   try { const ap = await sb.from('app_settings').select('show_hours').eq('id', 1).maybeSingle(); hoursSwErr = !!ap.error; showHours = ap.error ? true : ap.data?.show_hours !== false; } catch { hoursSwErr = true; }
+  try { const fr = await sb.from('final_reports').select('*').order('submitted_at', { ascending: false }).limit(2000); finErr = fr.error ? 'Falta ejecutar migracion_v17.sql en Supabase para usar los informes finales.' : ''; finals = fr.error ? [] : fr.data || []; } catch { finals = []; }
   await loadAvatars();
   $('msg').textContent = n.error || rd.error ? 'Algunas funciones no están disponibles (¿ya ejecutó migracion_v2.sql en Supabase?).'
     : v4 && sd.error ? 'No se pudo cargar el personal (¿ya ejecutó migracion_v4.sql en Supabase?).' : '';
@@ -161,6 +163,55 @@ async function renderAvisos() {
 
 
 // ---- Revisiones: horarios por confirmar y horas declaradas por revisar (migracion_v14.sql) ----
+// ---- Informes finales (migracion_v17.sql) ----
+const FIN_REQ = { prepractica: 160 * 60, practica: 200 * 60 };
+const FIN_LBL = { submitted: 'En revisión', approved: 'Aprobado', rejected: 'Devuelto' };
+async function openFinFile(path) {
+  const { data, error } = await sb.storage.from('final-reports').createSignedUrl(path, 300);
+  if (error || !data?.signedUrl) return alert('No se pudo abrir el archivo.');
+  window.open(data.signedUrl, '_blank', 'noopener');
+}
+async function decideFinal(r, ok) {
+  let note = null;
+  if (!ok) { const q = await ask({ title: 'Devolver el informe', hint: 'El estudiante verá este motivo y podrá corregirlo y reenviarlo.', label: 'Motivo', ok: 'Devolver' }); if (!q) return; note = q.note; }
+  else if (!confirm('¿Aprobar este informe final?')) return;
+  const { error } = await sb.rpc('staff_decide_final_report', { p_id: r.id, p_ok: ok, p_note: note });
+  if (error) alert(errText(error));
+  await load();
+}
+function finCard(r, opts = {}) {
+  const s = students.find(z => z.id === r.student_id), nm = s?.full_name || 'Estudiante';
+  const dl = h('dl', { className: 'fin-dl' }); [['Resumen general', r.summary], ['Actividades', r.activities], ['Aprendizajes', r.learnings], ['Logros', r.achievements], ['Dificultades', r.difficulties], ['Recomendaciones', r.recommendations]]
+    .forEach(([k, t]) => { if (t) dl.append(h('dt', { textContent: k }), h('dd', { textContent: t })); });
+  const acts = h('div', { className: 'revact' });
+  if (r.file_path) acts.append(h('button', { type: 'button', className: 'sec', textContent: 'Abrir ' + (r.file_name || 'archivo'), onclick: () => openFinFile(r.file_path) }));
+  if (r.status === 'submitted') acts.append(h('button', { type: 'button', textContent: 'Aprobar', onclick: () => decideFinal(r, true) }), h('button', { type: 'button', className: 'sec', textContent: 'Devolver con motivo', onclick: () => decideFinal(r, false) }));
+  if (r.status === 'approved') acts.append(h('button', { type: 'button', className: 'sec', textContent: 'Devolver con motivo', onclick: () => decideFinal(r, false) }));
+  if (!opts.noOpen) acts.append(h('button', { type: 'button', className: 'sec', textContent: 'Ver estudiante', onclick: () => openStudent(r.student_id) }));
+  const meta = `${PROG[r.program] || ''} · ${Horas.fHM(r.hours_min)} de ${Horas.fHM(r.required_min)} · enviado el ${fDT(r.submitted_at)}${r.revision > 1 ? ` (revisión ${r.revision})` : ''}`;
+  return h('details', { className: 'revc fin', open: !!opts.open },
+    h('summary', {}, h('b', { textContent: nm }), ' ', h('span', { className: 'fst ' + r.status, textContent: FIN_LBL[r.status] }), h('span', { className: 'lj-meta', textContent: meta })),
+    dl, r.decided_at ? h('p', { className: 'rg', textContent: `${r.status === 'approved' ? 'Aprobado' : 'Devuelto'} por ${by(r.decided_by)} el ${fDT(r.decided_at)}${r.decision_note ? ': ' + r.decision_note : ''}` }) : '', acts);
+}
+function renderFin() {
+  const body = $('fin-body'), pend = finals.filter(r => r.status === 'submitted').length;
+  $('fin-sum').textContent = 'Informes finales' + (pend ? ` (${pend})` : '');
+  body.replaceChildren(finErr ? h('p', { className: 'empty', textContent: finErr }) : '');
+  $('fin-f').value = finFilter;
+  const list = finals.filter(r => finFilter === 'all' || r.status === finFilter);
+  if (!list.length && !finErr) body.append(h('p', { className: 'empty', textContent: finFilter === 'submitted' ? 'No hay informes por revisar.' : 'No hay informes en este estado.' }));
+  list.forEach(r => body.append(finCard(r)));
+}
+function finalBlock(s) {
+  const box = h('section', { className: 'lastj schedj' }, h('h3', { textContent: 'Informe final' })), r = finals.find(z => z.student_id === s.id && z.program === s.program);
+  if (!s.program) return box.append(h('p', { className: 'empty', textContent: 'Asigne el tipo de práctica para llevar el control de horas.' })), box;
+  const req = FIN_REQ[s.program], done = Horas.summarize(logs.filter(x => x.student_id === s.id && (x.program || s.program) === s.program)).total;
+  box.append(h('p', { className: 'lj-meta', textContent: `Horas de ${PROG[s.program]}: ${Horas.fHM(done)} de ${Horas.fHM(req)}${done >= req ? ' (completas)' : ` (${Math.round(done * 100 / req)} %)`}` }));
+  if (finErr) box.append(h('p', { className: 'empty', textContent: finErr }));
+  else if (r) box.append(finCard(r, { noOpen: true, open: r.status === 'submitted' }));
+  else box.append(h('p', { className: 'empty', textContent: done >= req ? 'Ya completó las horas: todavía no presenta su informe final.' : 'Aún no completa las horas para presentar el informe final.' }));
+  return box;
+}
 // Interruptor: mostrar u ocultar a los estudiantes sus horas (solo administrador)
 function renderHrSw() {
   const box = $('hrsw'); box.replaceChildren(); box.classList.toggle('hidden', me?.role !== 'admin'); if (me?.role !== 'admin') return;
@@ -402,7 +453,7 @@ function render() {
 
   renderPending(today, byId);
   renderRest(today);
-  renderHrSw(); renderRev(); renderAvisos(); renderStaff(); renderNewStu(); renderAccts(); renderVids();
+  renderHrSw(); renderFin(); renderRev(); renderAvisos(); renderStaff(); renderNewStu(); renderAccts(); renderVids();
 
   const days = [...Array(14)].map((_, i) => shiftDay(today, i - 13));
   const cnt = days.map(d => logs.filter(x => x.practice_date === d).length), mx = Math.max(1, ...cnt);
@@ -573,6 +624,7 @@ const val2 = v => v === null || v === undefined ? '—' : v === true ? 'sí' : v
 function describe(a) {
   const stu = students.find(s => s.id === a.student_id), tgt = staffMap[a.target_user], d = a.detail || {};
   const ch = Object.entries(d).filter(([, v]) => v && typeof v === 'object' && 'a' in v).map(([k, v]) => `${FIELD[k] || k}: ${val2(v.de)} → ${val2(v.a)}`).join('; ');
+  if (a.action === 'informe_final_aprobado' || a.action === 'informe_final_rechazado') return `${a.action === 'informe_final_aprobado' ? 'Aprobó' : 'Devolvió'} el informe final de ${stu?.full_name || 'un estudiante'} (${val2(d.programa)})${d.nota ? ' · ' + d.nota : ''}`;
   if (a.action === 'horas_visibles') return d.visible ? 'Mostró las horas a los estudiantes' : 'Ocultó las horas a los estudiantes';
   if (a.action === 'avisos_ajustes') return `Cambió los ajustes de avisos: ${d.activados ? 'activados' : 'desactivados'}, cada ${d.cada_min} min, de ${String(d.horas).replace('-', ' a ')} h`;
   if (a.action === 'horario_confirmado' || a.action === 'horario_rechazado') return `${a.action === 'horario_confirmado' ? 'Confirmó' : 'Rechazó'} el horario semanal de ${stu?.full_name || 'un estudiante'}${d.nota ? ' · ' + d.nota : ''}`;
@@ -1131,7 +1183,7 @@ function tabResumen(s, M) {
       !s.program ? h('button', { type: 'button', className: 'sec', textContent: 'Asignar Prepráctica', onclick: () => setProgramFirst(s, 'prepractica') }) : ''));
   return h('div', { className: 'inner' },
     M.rei ? h('div', { className: 'banner', textContent: `Reincidente: ${M.m.length} jornadas sin cerrar a tiempo en los últimos ${REINC_DIAS} días. Considere registrar una amonestación.` }) : '',
-    h('div', { className: 'rsum' }, left, lastJornada(s, M)), schedBlock(s));
+    h('div', { className: 'rsum' }, left, lastJornada(s, M)), schedBlock(s), finalBlock(s));
 }
 // Horario semanal del estudiante (confirmado y, si existe, el pendiente)
 function schedBlock(s) {
@@ -1213,7 +1265,7 @@ function tabInforme(s) {
 }
 
 // ---- Menú de secciones (hamburguesa) ----
-const VSEC = { est: 'v-est', rev: 'rev', avisos: 'avisos', rest: 'rest', staff: 'staff', newstu: 'newstu', accts: 'accts', vids: 'vids', mos: 'mos' };
+const VSEC = { est: 'v-est', rev: 'rev', fin: 'fin', avisos: 'avisos', rest: 'rest', staff: 'staff', newstu: 'newstu', accts: 'accts', vids: 'vids', mos: 'mos' };
 let curView = 'est';
 const viewLabel = v => v === 'mos' ? 'Mosaico de videos' : v === 'est' ? 'Estudiantes' : ($(VSEC[v] + '-sum') || $(VSEC[v]).querySelector('h2'))?.textContent || v;
 function setView(v) {
@@ -1239,6 +1291,7 @@ function closeMenu() { const d = $('drawer'); if (d.hidden) return; d.classList.
 $('mb').onclick = () => $('drawer').hidden ? openMenu() : closeMenu();
 $('dclose').onclick = () => { closeMenu(); $('mb').focus(); };
 $('scrim').onclick = closeMenu;
+$('fin-f').onchange = e => { finFilter = e.target.value; renderFin(); };
 $('vc').onclick = () => { UI.view = 'cards'; saveUI(); render(); };
 $('vt').onclick = () => { UI.view = 'table'; saveUI(); render(); };
 $('srt').onchange = e => { UI.sk = e.target.value; UI.sd = defDir(UI.sk); saveUI(); render(); };

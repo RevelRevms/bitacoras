@@ -2,8 +2,10 @@ const sb = supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY,
   { auth: { persistSession: true, autoRefreshToken: true } });
 const $ = id => document.getElementById(id);
 const TZ = 'America/Guatemala', MAX = 10 * 1024 * 1024;
-const SCREENS = ['s-login','s-profile','s-extra','s-sched','s-more','s-home','s-form','s-done','s-staff'];
+const SCREENS = ['s-login','s-profile','s-extra','s-sched','s-more','s-final','s-home','s-form','s-done','s-staff'];
 let pushInit = false;
+const FINAL_ARCHIVO_OBLIGATORIO = false;   // true: el estudiante debe adjuntar el archivo además del formulario
+let finalSt = null;
 let showHours = true;   // lo decide el administrador (migracion_v16.sql); si la tabla no existe, se muestran
 let mySched = { conf: null, pend: null, rej: null, any: false }, schedSkip = false;
 let user, student, log, myLogs = [], myNotes = [], myRests = [], video = null, myArch = {}, myPArch = {}; // video = {blob, type, name} (solo para la vista previa local)
@@ -36,6 +38,11 @@ const ERR = {
   TEXTO_DEMASIADO_LARGO: 'Uno de los textos es demasiado largo.',
   ENCARGADO_REQUERIDO: 'Escriba el nombre del encargado de su práctica.',
   DATO_YA_REGISTRADO: 'Ese dato ya está registrado y no se puede cambiar desde aquí. Si hay un error, avise a su supervisor de práctica.',
+  HORAS_INSUFICIENTES: 'Todavía no completa las horas requeridas para presentar el informe final.',
+  INFORME_CAMPO_CORTO: 'Resumen, actividades y aprendizajes necesitan al menos 50 caracteres cada uno.',
+  INFORME_CAMPO_LARGO: 'Alguno de los textos es demasiado largo.',
+  ARCHIVO_INVALIDO: 'No se pudo adjuntar el archivo. Vuelva a elegirlo (PDF, Word o Excel, hasta 10 MB).',
+  INFORME_YA_ENVIADO: 'Su informe final ya fue enviado.',
   NADA_QUE_COMPLETAR: 'Escriba el dato que falta.',
   HORARIO_INVALIDO: 'El horario no es válido: revise las horas y el almuerzo de cada día.',
   HORARIO_VACIO: 'Marque al menos un día de trabajo.',
@@ -97,6 +104,7 @@ async function route() {
   try { const sr = await sb.from('schedule_versions').select('*').eq('student_id', user.id).order('created_at', { ascending: false }).limit(30);
     mySched = schedState(sr.error ? [] : sr.data || []); } catch { mySched = schedState([]); }   // migracion_v14: si aún no existe, rige la regla anterior
   try { const hr = await sb.from('app_settings').select('show_hours').eq('id', 1).maybeSingle(); showHours = hr.error ? true : hr.data?.show_hours !== false; } catch { showHours = true; }
+  try { const fr = await sb.rpc('my_final_status'); finalSt = fr.error ? null : fr.data; } catch { finalSt = null; }   // migracion_v17.sql
   setWho(); setTitle(student.program);
   showAvatars();
   document.querySelectorAll('.go-more').forEach(b => b.textContent = mySched.any ? 'Mi horario y avisos' : 'Definir mi horario y avisos');
@@ -109,7 +117,7 @@ async function route() {
   }
   if (log?.practice_date === todayGT()) return showReceipt();
   if (!mySched.any && !schedSkip && student.active !== false) return openSched();
-  renderSchedCard();
+  renderSchedCard(); renderFinalCard($('final-card'));
   if (!pushInit) { pushInit = true; Push.init(sb); }
   Push.card($('push-card'), { compact: true });
   $('today').textContent = fmtDate(todayGT());
@@ -627,7 +635,7 @@ function renderSchedCard(c = $('sched-card')) {
   c.classList.remove('hidden');
 }
 function openMore() {   // horario y avisos también con la jornada iniciada o ya registrada hoy
-  renderSchedCard($('sched-card2'));
+  renderSchedCard($('sched-card2')); renderFinalCard($('final-card2'));
   if (!pushInit) { pushInit = true; Push.init(sb); }
   Push.card($('push-card2'), { compact: true });
   msg(''); show('s-more');
@@ -775,6 +783,69 @@ function kindRows(x) {
   side(x.exit_kind, x.exit_reason, x.exit_adj_at, x.exit_adj_status, x.exit_note, 'Salida');
   return out;
 }
+
+// ---- Informe final (migracion_v17.sql): al completar 160 h (prepráctica) o 200 h (práctica supervisada) ----
+const FIN_ST = { submitted: 'En revisión', approved: 'Aprobado', rejected: 'Devuelto para corregir' };
+const FIN_MIME = { pdf: 'application/pdf', doc: 'application/msword', docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  xls: 'application/vnd.ms-excel', xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' };
+function renderFinalCard(box) {
+  box.replaceChildren();
+  const s = finalSt; if (!s || !s.program) return box.classList.add('hidden');
+  box.classList.remove('hidden'); box.append(el('b', { textContent: 'Informe final' }));
+  const r = s.report, prog = PROG[s.program] || '';
+  if (r) {
+    box.append(el('p', { className: 'info', textContent: `${FIN_ST[r.status]}${r.status === 'approved' && r.decided_at ? ' el ' + fmtDate(r.decided_at.slice(0, 10)) : ''}.` + (r.status === 'rejected' && r.decision_note ? ' Motivo: ' + r.decision_note : '') }),
+      el('button', { type: 'button', className: 'sec small', textContent: r.status === 'rejected' ? 'Corregir y reenviar' : 'Ver mi informe', onclick: openFinal }));
+  } else if (s.eligible) {
+    box.append(el('p', { className: 'info', textContent: `Ya completó las horas de su ${prog}. Puede presentar su informe final.` }),
+      el('button', { type: 'button', textContent: 'Presentar informe final', onclick: openFinal }));
+  } else if (showHours) {
+    const pct = Math.min(100, Math.round(s.done_min * 100 / s.required_min));
+    box.append(el('p', { className: 'info', textContent: `Lo podrá presentar al completar ${Horas.fHM(s.required_min)} de su ${prog}. Lleva ${Horas.fHM(s.done_min)} (${pct} %).` }));
+  } else box.append(el('p', { className: 'info', textContent: `Lo podrá presentar al completar las horas de su ${prog}.` }));
+}
+async function openFinalFile(path) {
+  const { data, error } = await sb.storage.from('final-reports').createSignedUrl(path, 300);
+  if (error || !data?.signedUrl) return msg('No se pudo abrir el archivo.');
+  window.open(data.signedUrl, '_blank', 'noopener');
+}
+function openFinal() {
+  const s = finalSt, r = s?.report, ro = r && r.status !== 'rejected'; if (!s?.program) return;
+  $('fin-sub').textContent = `${PROG[s.program]}: informe final.` + (showHours ? ` Horas completadas: ${Horas.fHM(s.done_min)} de ${Horas.fHM(s.required_min)}.` : '');
+  const nb = $('fin-note'); nb.classList.toggle('hidden', !(r?.status === 'rejected' && r.decision_note));
+  nb.textContent = r?.status === 'rejected' ? 'El equipo de supervisión lo devolvió: ' + (r.decision_note || '') : '';
+  const f = { 'fi-sum': r?.summary, 'fi-act': r?.activities, 'fi-lea': r?.learnings, 'fi-ach': r?.achievements, 'fi-dif': r?.difficulties, 'fi-rec': r?.recommendations };
+  Object.entries(f).forEach(([id, v]) => $(id).value = v || ''); $('fi-file').value = '';
+  $('fi-cur').replaceChildren(r?.file_name ? el('span', {}, 'Archivo actual: ', el('a', { href: '#', textContent: r.file_name, onclick: e => { e.preventDefault(); openFinalFile(r.file_path); } }), r.status === 'rejected' ? '. Si elige otro, lo reemplaza.' : '') : (FINAL_ARCHIVO_OBLIGATORIO ? 'Adjunte su archivo.' : ''));
+  $('f-final').classList.toggle('hidden', !!ro);
+  const v = $('fin-view'); v.classList.toggle('hidden', !ro); v.replaceChildren();
+  if (ro) { const dl = el('dl'); [['Resumen general', r.summary], ['Actividades', r.activities], ['Aprendizajes', r.learnings], ['Logros', r.achievements], ['Dificultades', r.difficulties], ['Recomendaciones', r.recommendations]]
+      .forEach(([k, t]) => { if (t) dl.append(el('dt', { textContent: k }), el('dd', { textContent: t })); });
+    v.append(el('p', { className: r.status === 'approved' ? 'ok' : 'info', textContent: r.status === 'approved' ? 'Informe aprobado.' : 'Su informe fue enviado y está en revisión.' }), dl,
+      r.file_name ? el('a', { href: '#', className: 'btn sec', textContent: 'Abrir ' + r.file_name, onclick: e => { e.preventDefault(); openFinalFile(r.file_path); } }) : '',
+      el('button', { type: 'button', className: 'sec', textContent: 'Volver', onclick: () => route() })); }
+  msg(''); show('s-final');
+}
+$('fi-back').onclick = () => route();
+$('f-final').onsubmit = async e => { e.preventDefault(); msg('');
+  const v = id => $(id).value.trim(), r = finalSt?.report;
+  if (v('fi-sum').length < 50 || v('fi-act').length < 50 || v('fi-lea').length < 50) return msg(ERR.INFORME_CAMPO_CORTO);
+  const file = $('fi-file').files[0]; let path = null;
+  if (!file && FINAL_ARCHIVO_OBLIGATORIO && !r?.file_path) return msg('Adjunte el archivo de su informe.');
+  const ext = file ? file.name.split('.').pop().toLowerCase() : '';
+  if (file && !FIN_MIME[ext]) return msg('El archivo debe ser PDF, Word (.doc, .docx) o Excel (.xls, .xlsx).');
+  if (file && file.size > 10 * 1024 * 1024) return msg('El archivo pesa más de 10 MB.');
+  const btn = $('fi-send'); btn.disabled = true; btn.textContent = 'Enviando…';
+  try {
+    if (file) { path = `${user.id}/${finalSt.program}/${crypto.randomUUID()}.${ext}`;
+      const up = await sb.storage.from('final-reports').upload(path, file, { contentType: FIN_MIME[ext], upsert: false }); if (up.error) throw up.error; }
+    const { error } = await sb.rpc('submit_final_report', { p_summary: v('fi-sum'), p_activities: v('fi-act'), p_learnings: v('fi-lea'), p_achievements: v('fi-ach') || null,
+      p_difficulties: v('fi-dif') || null, p_recommendations: v('fi-rec') || null, p_file_path: path, p_file_name: file ? file.name.slice(0, 200) : null, p_file_size: file ? file.size : null });
+    if (error) { if (path) await sb.storage.from('final-reports').remove([path]); throw error; }
+    if (path && r?.file_path) await sb.storage.from('final-reports').remove([r.file_path]);   // el archivo anterior (de un informe devuelto) ya no se usa
+    await route(); msg('Informe final enviado. Lo revisará el equipo de supervisión.');
+  } catch (er) { fail(er); } finally { btn.disabled = false; btn.textContent = 'Enviar informe final'; }
+};
 
 sb.auth.onAuthStateChange((ev) => { if (ev === 'SIGNED_OUT') route(); });
 route();

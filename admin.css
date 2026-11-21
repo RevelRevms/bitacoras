@@ -442,3 +442,11 @@ dl.sched{display:grid;grid-template-columns:auto 1fr;gap:2px 14px;margin:6px 0;f
 .sw input:checked+.trk{background:#1f7a4d}.sw input:checked+.trk::after{transform:translateX(18px)}
 .sw input:focus-visible+.trk{outline:3px solid #c28a00;outline-offset:2px}.sw input:disabled+.trk{opacity:.5}
 @media (prefers-reduced-motion:reduce){.sw .trk,.sw .trk::after{transition:none}}
+
+/* informes finales */
+.revc.fin>summary{cursor:pointer;display:flex;flex-wrap:wrap;gap:4px 10px;align-items:baseline;list-style:none;min-height:44px}
+.revc.fin>summary::-webkit-details-marker{display:none}
+.revc.fin>summary .lj-meta{flex-basis:100%}
+.fst{display:inline-block;padding:2px 8px;border-radius:10px;font-size:.78rem;font-weight:700;background:#fff4cc;color:#7a5200}
+.fst.approved{background:#dff3e6;color:#165c39}.fst.rejected{background:#fde8e6;color:#9b1f19}
+dl.fin-dl{margin:10px 0}dl.fin-dl dt{font-weight:700;margin-top:8px}dl.fin-dl dd{margin:2px 0 0;white-space:pre-wrap;overflow-wrap:anywhere}
