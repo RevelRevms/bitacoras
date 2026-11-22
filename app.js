@@ -798,7 +798,7 @@ function renderFinalCard(box) {
       el('button', { type: 'button', className: 'sec small', textContent: r.status === 'rejected' ? 'Corregir y reenviar' : 'Ver mi informe', onclick: openFinal }));
   } else {
     const pct = s.eligible ? 100 : Math.max(0, Math.min(100, Math.floor(s.done_min * 100 / s.required_min)));   // solo se dibuja: no se muestran horas ni porcentaje
-    box.append(el('div', { className: 'goal', role: 'progressbar', 'aria-label': 'Avance hacia el informe final', 'aria-valuemin': '0', 'aria-valuemax': '100', 'aria-valuenow': String(pct) }, el('i', { style: `width:${pct}%` })));
+    box.append(el('div', { className: 'goal', role: 'progressbar', 'aria-label': 'Avance hacia el informe final', 'aria-valuemin': '0', 'aria-valuemax': '100', 'aria-valuenow': String(pct) }, el('i', { style: `width:${pct}%` }, el('b', { style: `width:${pct ? 10000 / pct : 100}%` }))));
     if (s.eligible) box.append(el('p', { className: 'info', textContent: `¡Meta cumplida! Ya completó su ${prog}. Puede presentar su informe final.` }),
       el('button', { type: 'button', textContent: 'Presentar informe final', onclick: openFinal }));
     else box.append(el('p', { className: 'info', textContent: `Su meta: completar su ${prog} para presentar el informe final.` }));

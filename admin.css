@@ -450,3 +450,10 @@ dl.sched{display:grid;grid-template-columns:auto 1fr;gap:2px 14px;margin:6px 0;f
 .fst{display:inline-block;padding:2px 8px;border-radius:10px;font-size:.78rem;font-weight:700;background:#fff4cc;color:#7a5200}
 .fst.approved{background:#dff3e6;color:#165c39}.fst.rejected{background:#fde8e6;color:#9b1f19}
 dl.fin-dl{margin:10px 0}dl.fin-dl dt{font-weight:700;margin-top:8px}dl.fin-dl dd{margin:2px 0 0;white-space:pre-wrap;overflow-wrap:anywhere}
+
+/* barra de meta (azul a verde) */
+.goalw{display:flex;align-items:center;gap:8px;margin-top:6px}.goalw small{font-size:.78rem;color:var(--muted,#56607a);min-width:2.6em;text-align:right}
+.goalw .goal{flex:1;height:10px;border-radius:5px;background:#e3e8f2;border:1.5px solid var(--ink,#14213d);overflow:hidden;min-width:70px;margin:0}
+.goalw.big .goal{height:14px}
+.goal i{display:block;height:100%;overflow:hidden}.goal i b{display:block;height:100%;background:linear-gradient(90deg,#1d5fd8 0%,#1796b8 50%,#1fae5e 100%)}
+td.c-goal{min-width:130px}

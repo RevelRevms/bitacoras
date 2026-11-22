@@ -212,6 +212,8 @@ ol.pst{margin:6px 0 4px 20px;padding:0;font-size:.92rem}ol.pst li{margin:3px 0}
 
 /* barra de meta del informe final (sin cifras) */
 .goal{height:14px;border-radius:7px;background:#e3e8f2;border:2px solid var(--ink);overflow:hidden;margin:8px 0}
-.goal i{display:block;height:100%;background:var(--hl);border-right:2px solid var(--ink);transition:width .6s ease}
 .goal[aria-valuenow="0"] i{border-right:0}
 @media (prefers-reduced-motion:reduce){.goal i{transition:none}}
+
+.goal i{display:block;height:100%;overflow:hidden;border-right:2px solid var(--ink);transition:width .6s ease}
+.goal i b{display:block;height:100%;background:linear-gradient(90deg,#1d5fd8 0%,#1796b8 50%,#1fae5e 100%)}

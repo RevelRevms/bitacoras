@@ -207,6 +207,7 @@ function finalBlock(s) {
   if (!s.program) return box.append(h('p', { className: 'empty', textContent: 'Asigne el tipo de práctica para llevar el control de horas.' })), box;
   const req = FIN_REQ[s.program], done = Horas.summarize(logs.filter(x => x.student_id === s.id && (x.program || s.program) === s.program)).total;
   box.append(h('p', { className: 'lj-meta', textContent: `Horas de ${PROG[s.program]}: ${Horas.fHM(done)} de ${Horas.fHM(req)}${done >= req ? ' (completas)' : ` (${Math.round(done * 100 / req)} %)`}` }));
+  const gp = goalEl(s, { mine: logs.filter(x => x.student_id === s.id) }, true); if (gp) box.append(gp);
   if (finErr) box.append(h('p', { className: 'empty', textContent: finErr }));
   else if (r) box.append(finCard(r, { noOpen: true, open: r.status === 'submitted' }));
   else box.append(h('p', { className: 'empty', textContent: done >= req ? 'Ya completó las horas: todavía no presenta su informe final.' : 'Aún no completa las horas para presentar el informe final.' }));
@@ -1032,10 +1033,10 @@ let UI = { view: 'cards', sk: 'name', sd: 1 };
 try { Object.assign(UI, JSON.parse(localStorage.getItem('bitacora.admin.ui') || '{}')); } catch {}
 const saveUI = () => { try { localStorage.setItem('bitacora.admin.ui', JSON.stringify(UI)); } catch {} };
 let curList = [];
-const SORTS = [['name', 'Nombre'], ['grade', 'Grado'], ['state', 'Estado del día'], ['dayh', 'Horas del día'], ['tot', 'Horas totales'], ['over', 'Horas extra'], ['n', 'Bitácoras'], ['inc', 'Incidentes'], ['last', 'Última jornada']];
+const SORTS = [['name', 'Nombre'], ['grade', 'Grado'], ['state', 'Estado del día'], ['dayh', 'Horas del día'], ['tot', 'Horas totales'], ['goal', 'Meta del informe'], ['over', 'Horas extra'], ['n', 'Bitácoras'], ['inc', 'Incidentes'], ['last', 'Última jornada']];
 const SORTV = {
   name: s => s.full_name, grade: s => `${s.grade} ${s.section}`, state: (s, M) => M.st.rank, dayh: (s, M) => M.dm ?? -1,
-  tot: (s, M) => M.hs.total || 0, over: (s, M) => M.hs.over || 0, n: (s, M) => M.n, inc: (s, M) => M.inc, last: (s, M) => M.last ? Number(M.last.replace(/-/g, '')) : 0 };
+  tot: (s, M) => M.hs.total || 0, goal: (s, M) => goalPct(s, M)?.pct ?? -1, over: (s, M) => M.hs.over || 0, n: (s, M) => M.n, inc: (s, M) => M.inc, last: (s, M) => M.last ? Number(M.last.replace(/-/g, '')) : 0 };
 const TEXTKEYS = ['name', 'grade'];
 const defDir = k => TEXTKEYS.includes(k) || k === 'state' ? 1 : -1;
 function setSort(k) { if (UI.sk === k) UI.sd = -UI.sd; else { UI.sk = k; UI.sd = defDir(k); } saveUI(); render(); }
@@ -1060,6 +1061,10 @@ function metrics(s) {
   return { mine, n: mine.length, inc: mine.filter(x => x.has_incident).length, m, rei: m.length >= REINC_N, tl,
     hs: Horas.summarize(mine), dm: Horas.minutes(tl), st: dayState(s, mine), last: mine.reduce((a, x) => x.practice_date > a ? x.practice_date : a, '') };
 }
+const goalPct = (s, M) => { const req = FIN_REQ[s.program]; if (!req) return null; const done = Horas.summarize(M.mine.filter(x => (x.program || s.program) === s.program)).total || 0; return { done, req, pct: Math.min(100, Math.floor(done * 100 / req)) }; };
+const goalEl = (s, M, big) => { const g = goalPct(s, M); if (!g) return ''; const tip = `${Horas.fHM(g.done)} de ${Horas.fHM(g.req)} (${g.pct} %)`;
+  return h('div', { className: 'goalw' + (big ? ' big' : ''), title: tip }, h('div', { className: 'goal', role: 'progressbar', ariaLabel: 'Avance hacia el informe final: ' + tip, 'aria-valuemin': '0', 'aria-valuemax': '100', 'aria-valuenow': String(g.pct) },
+    h('i', { style: `width:${g.pct}%` }, h('b', { style: `width:${g.pct ? 10000 / g.pct : 100}%` }))), h('small', { textContent: g.pct + ' %' })); };
 const ledEl = st => st.text ? h('div', { className: 'led ' + st.cls, textContent: st.text }) : '';
 function hrsEl(M) {
   const isT = viewDay() === todayGT();
@@ -1078,12 +1083,12 @@ function studentCard(s, M) {
   const card = h('div', { className: 'scard ' + M.st.cls + (s.active ? '' : ' off'), id: 'stu-' + s.id, tabIndex: 0, role: 'button', ariaLabel: 'Abrir la ficha de ' + s.full_name,
     onclick: open, onkeydown: e => { if (e.target === card && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); open(); } } },
     avatar(s, 'mk', false),
-    h('div', { className: 'who' }, h('b', { textContent: s.full_name }), h('span', { className: 'gr', textContent: `${s.grade} ${s.section}` }), badgesEl(s), ledEl(M.st), hrsEl(M)),
+    h('div', { className: 'who' }, h('b', { textContent: s.full_name }), h('span', { className: 'gr', textContent: `${s.grade} ${s.section}` }), badgesEl(s), ledEl(M.st), hrsEl(M), goalEl(s, M)),
     cntEl(M));
   return card;
 }
 function studentTable(list, M) {
-  const COLS = [['name', 'Estudiante'], ['grade', 'Grado'], ['prog', 'Tipo'], ['state', 'Estado del día'], ['dayh', 'Horas del día'], ['tot', 'Horas totales'], ['over', 'Extras'], ['n', 'Bitácoras'], ['inc', 'Incidentes'], ['last', 'Última jornada']];
+  const COLS = [['name', 'Estudiante'], ['grade', 'Grado'], ['prog', 'Tipo'], ['state', 'Estado del día'], ['dayh', 'Horas del día'], ['tot', 'Horas totales'], ['goal', 'Meta'], ['over', 'Extras'], ['n', 'Bitácoras'], ['inc', 'Incidentes'], ['last', 'Última jornada']];
   const th = ([k, t]) => { const sortable = k !== 'prog', on = UI.sk === k;
     return h('th', { scope: 'col', ariaSort: on ? (UI.sd === 1 ? 'ascending' : 'descending') : 'none', className: 'c-' + k },
       sortable ? h('button', { type: 'button', className: 'thb', onclick: () => setSort(k) }, t, h('i', { textContent: on ? (UI.sd === 1 ? ' ▲' : ' ▼') : '' })) : t); };
@@ -1097,6 +1102,7 @@ function studentTable(list, M) {
       h('td', {}, m.st.text ? h('span', { className: 'led ' + m.st.cls, textContent: m.st.text }) : '—'),
       h('td', { className: 'num' }, m.dm !== null ? h('span', { className: 'hc ' + (m.dm >= Horas.jornada(viewDay()) ? 'ok' : 'low'), textContent: Horas.fHM(m.dm) }) : '—'),
       h('td', { className: 'num', textContent: hm(m.hs.total) }),
+      h('td', { className: 'c-goal' }, goalEl(s, m) || '—'),
       h('td', { className: 'num' }, m.hs.over ? h('span', { className: 'hc xtra', textContent: '+' + Horas.fHM(m.hs.over) }) : '—'),
       h('td', { className: 'num', textContent: m.n }),
       h('td', { className: 'num' + (m.inc ? ' red' : ''), textContent: m.inc || '—' }),
