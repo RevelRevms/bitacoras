@@ -166,10 +166,13 @@ async function renderAvisos() {
 // ---- Informes finales (migracion_v17.sql) ----
 const FIN_REQ = { prepractica: 160 * 60, practica: 200 * 60 };
 const FIN_LBL = { submitted: 'En revisión', approved: 'Aprobado', rejected: 'Devuelto' };
-async function openFinFile(path) {
-  const { data, error } = await sb.storage.from('final-reports').createSignedUrl(path, 300);
-  if (error || !data?.signedUrl) return alert('No se pudo abrir el archivo.');
-  window.open(data.signedUrl, '_blank', 'noopener');
+async function openFinFile(path, name, download) {
+  // La pestaña se abre antes de pedir el enlace: así los navegadores (Safari/iPhone) no la bloquean.
+  const w = download ? null : window.open('', '_blank');
+  const { data, error } = await sb.storage.from('final-reports').createSignedUrl(path, 300, download ? { download: name || true } : undefined);
+  if (error || !data?.signedUrl) { if (w) w.close(); return alert('No se pudo abrir el archivo.'); }
+  if (download) { const a = document.createElement('a'); a.href = data.signedUrl; a.download = name || ''; document.body.append(a); a.click(); a.remove(); }
+  else if (w) w.location.href = data.signedUrl; else location.href = data.signedUrl;
 }
 async function decideFinal(r, ok) {
   let note = null;
@@ -184,7 +187,10 @@ function finCard(r, opts = {}) {
   const dl = h('dl', { className: 'fin-dl' }); [['Resumen general', r.summary], ['Actividades', r.activities], ['Aprendizajes', r.learnings], ['Logros', r.achievements], ['Dificultades', r.difficulties], ['Recomendaciones', r.recommendations]]
     .forEach(([k, t]) => { if (t) dl.append(h('dt', { textContent: k }), h('dd', { textContent: t })); });
   const acts = h('div', { className: 'revact' });
-  if (r.file_path) acts.append(h('button', { type: 'button', className: 'sec', textContent: 'Abrir ' + (r.file_name || 'archivo'), onclick: () => openFinFile(r.file_path) }));
+  if (r.file_path) {
+    if (/\.pdf$/i.test(r.file_name || r.file_path)) acts.append(h('button', { type: 'button', className: 'sec', textContent: 'Ver archivo', onclick: () => openFinFile(r.file_path, r.file_name, false) }));
+    acts.append(h('button', { type: 'button', className: 'sec', textContent: 'Descargar ' + (r.file_name || 'archivo'), onclick: () => openFinFile(r.file_path, r.file_name, true) }));
+  }
   if (r.status === 'submitted') acts.append(h('button', { type: 'button', textContent: 'Aprobar', onclick: () => decideFinal(r, true) }), h('button', { type: 'button', className: 'sec', textContent: 'Devolver con motivo', onclick: () => decideFinal(r, false) }));
   if (r.status === 'approved') acts.append(h('button', { type: 'button', className: 'sec', textContent: 'Devolver con motivo', onclick: () => decideFinal(r, false) }));
   if (!opts.noOpen) acts.append(h('button', { type: 'button', className: 'sec', textContent: 'Ver estudiante', onclick: () => openStudent(r.student_id) }));

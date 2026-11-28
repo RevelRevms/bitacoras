@@ -804,10 +804,13 @@ function renderFinalCard(box) {
     else box.append(el('p', { className: 'info', textContent: `Su meta: completar su ${prog} para presentar el informe final.` }));
   }
 }
-async function openFinalFile(path) {
-  const { data, error } = await sb.storage.from('final-reports').createSignedUrl(path, 300);
-  if (error || !data?.signedUrl) return msg('No se pudo abrir el archivo.');
-  window.open(data.signedUrl, '_blank', 'noopener');
+async function openFinalFile(path, name, download) {
+  // La pestaña se abre antes de pedir el enlace: así los navegadores (Safari/iPhone) no la bloquean.
+  const w = download ? null : window.open('', '_blank');
+  const { data, error } = await sb.storage.from('final-reports').createSignedUrl(path, 300, download ? { download: name || true } : undefined);
+  if (error || !data?.signedUrl) { if (w) w.close(); return msg('No se pudo abrir el archivo.'); }
+  if (download) { const a = document.createElement('a'); a.href = data.signedUrl; a.download = name || ''; document.body.append(a); a.click(); a.remove(); }
+  else if (w) w.location.href = data.signedUrl; else location.href = data.signedUrl;
 }
 function openFinal() {
   const s = finalSt, r = s?.report, ro = r && r.status !== 'rejected'; if (!s?.program) return;
@@ -816,13 +819,13 @@ function openFinal() {
   nb.textContent = r?.status === 'rejected' ? 'El equipo de supervisión lo devolvió: ' + (r.decision_note || '') : '';
   const f = { 'fi-sum': r?.summary, 'fi-act': r?.activities, 'fi-lea': r?.learnings, 'fi-ach': r?.achievements, 'fi-dif': r?.difficulties, 'fi-rec': r?.recommendations };
   Object.entries(f).forEach(([id, v]) => $(id).value = v || ''); $('fi-file').value = '';
-  $('fi-cur').replaceChildren(r?.file_name ? el('span', {}, 'Archivo actual: ', el('a', { href: '#', textContent: r.file_name, onclick: e => { e.preventDefault(); openFinalFile(r.file_path); } }), r.status === 'rejected' ? '. Si elige otro, lo reemplaza.' : '') : (FINAL_ARCHIVO_OBLIGATORIO ? 'Adjunte su archivo.' : ''));
+  $('fi-cur').replaceChildren(r?.file_name ? el('span', {}, 'Archivo actual: ', el('a', { href: '#', textContent: r.file_name, onclick: e => { e.preventDefault(); openFinalFile(r.file_path, r.file_name, true); } }), r.status === 'rejected' ? '. Si elige otro, lo reemplaza.' : '') : (FINAL_ARCHIVO_OBLIGATORIO ? 'Adjunte su archivo.' : ''));
   $('f-final').classList.toggle('hidden', !!ro);
   const v = $('fin-view'); v.classList.toggle('hidden', !ro); v.replaceChildren();
   if (ro) { const dl = el('dl'); [['Resumen general', r.summary], ['Actividades', r.activities], ['Aprendizajes', r.learnings], ['Logros', r.achievements], ['Dificultades', r.difficulties], ['Recomendaciones', r.recommendations]]
       .forEach(([k, t]) => { if (t) dl.append(el('dt', { textContent: k }), el('dd', { textContent: t })); });
     v.append(el('p', { className: r.status === 'approved' ? 'ok' : 'info', textContent: r.status === 'approved' ? 'Informe aprobado.' : 'Su informe fue enviado y está en revisión.' }), dl,
-      r.file_name ? el('a', { href: '#', className: 'btn sec', textContent: 'Abrir ' + r.file_name, onclick: e => { e.preventDefault(); openFinalFile(r.file_path); } }) : '',
+      r.file_name ? el('a', { href: '#', className: 'btn sec', textContent: 'Descargar ' + r.file_name, onclick: e => { e.preventDefault(); openFinalFile(r.file_path, r.file_name, true); } }) : '',
       el('button', { type: 'button', className: 'sec', textContent: 'Volver', onclick: () => route() })); }
   msg(''); show('s-final');
 }
